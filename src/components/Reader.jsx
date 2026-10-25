@@ -248,7 +248,7 @@ export default function Reader({ item, dir, webConnected, onArchive, onUnread, o
           <button type="button" className="tool" onClick={onToggleMute} title={item.muted ? 'Unmute here (⌘⇧M)' : 'Mute this conversation here (⌘⇧M)'}>
             {item.muted ? <BellIcon /> : <MuteIcon />}
           </button>
-          <button type="button" className="tool" onClick={() => ctx.openInSlack()} title="Open in Slack (o)"><ExternalIcon /></button>
+          <button type="button" className="tool" onClick={() => ctx.openInSlack()} title="Open thread in Slack (⌘⇧A)"><ExternalIcon /></button>
           <button type="button" className="tool" onClick={onUnread} title="Mark unread (u)"><UnreadIcon /></button>
           <button type="button" className="tool primary" onClick={onArchive} title={item.archived ? 'Move to Inbox (e)' : 'Archive (e)'}>
             <ArchiveIcon /> <span>{item.archived ? 'Unarchive' : 'Archive'}</span> <kbd>E</kbd>

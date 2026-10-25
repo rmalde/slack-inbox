@@ -251,7 +251,7 @@ export default function App() {
             <button type="button" className="pop-item" onClick={() => window.api.syncNow()}>Refresh now <kbd>⌘R</kbd></button>
             <div className="pop-keys">
               <span><kbd>J</kbd><kbd>K</kbd> move</span><span><kbd>E</kbd> archive</span><span><kbd>Z</kbd> undo</span>
-              <span><kbd>R</kbd> reply</span><span><kbd>U</kbd> unread</span><span><kbd>O</kbd> open in Slack</span>
+              <span><kbd>R</kbd> reply</span><span><kbd>U</kbd> unread</span><span><kbd>⌘⇧A</kbd> open in Slack</span>
               <span><kbd>M</kbd> mute here</span><span><kbd>/</kbd> filter</span>
             </div>
           </div>

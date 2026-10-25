@@ -80,7 +80,7 @@ function buildMenu() {
       submenu: [
         { label: 'Archive', accelerator: 'CmdOrCtrl+Shift+E', click: to('cmd', 'archive') },
         { label: 'Mark Unread', accelerator: 'CmdOrCtrl+Shift+U', click: to('cmd', 'unread') },
-        { label: 'Open in Slack', accelerator: 'CmdOrCtrl+Shift+O', click: to('cmd', 'open-slack') },
+        { label: 'Open Thread in Slack', accelerator: 'CmdOrCtrl+Shift+A', click: to('cmd', 'open-slack') },
         { label: 'Mute Channel Here', accelerator: 'CmdOrCtrl+Shift+M', click: to('cmd', 'mute') },
         { type: 'separator' },
         { label: 'Next', accelerator: 'CmdOrCtrl+Down', click: to('cmd', 'next') },
@@ -339,7 +339,8 @@ ipcMain.handle('item:react', async (_e, { channel, ts: msgTs, name, remove }) =>
 ipcMain.handle('item:openInSlack', (_e, { key, ts: msgTs }) => {
   const it = store.items[key];
   if (!it) return false;
-  shell.openExternal(sync.permalink(it, msgTs));
+  const hasDesktop = fs.existsSync('/Applications/Slack.app') || fs.existsSync(path.join(require('os').homedir(), 'Applications', 'Slack.app'));
+  shell.openExternal(hasDesktop ? sync.deepLink(it, msgTs) : sync.permalink(it, msgTs));
   return true;
 });
 

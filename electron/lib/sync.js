@@ -382,6 +382,20 @@ class Sync {
     this.lastRead[channel] = best;
   }
 
+  // Deep link for the Slack desktop app. With thread_ts it opens the channel
+  // AND the thread pane on that thread (an https permalink handed to the app
+  // does nothing; in a browser it only highlights the parent message).
+  deepLink(it, msgTs) {
+    const q = new URLSearchParams({ team: this.store.meta.teamId || '', id: it.channel });
+    if (it.kind === 'thread') {
+      q.set('message', msgTs || it.lastTs || it.threadTs);
+      q.set('thread_ts', it.threadTs);
+    } else {
+      q.set('message', msgTs || it.lastTs);
+    }
+    return `slack://channel?${q}`;
+  }
+
   permalink(it, msgTs) {
     const dom = this.store.meta.teamDomain || 'app';
     const t = msgTs || it.threadTs || it.lastTs;

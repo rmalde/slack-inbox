@@ -32,7 +32,7 @@ inside Slack Inbox with **M** (stored locally).
 ## Keys
 
 `J`/`K` or arrows move · `E` archive (or unarchive in Archived) · `Z` undo ·
-`R`/`Enter` reply · `U` mark unread · `O` open in Slack · `M` mute here ·
+`R`/`Enter` reply · `U` mark unread · `⌘⇧A` (or `O`) open the thread in the Slack app · `M` mute here ·
 `/` filter · `⌘1`/`⌘2` Inbox/Archived · `⌘R` refresh. In the composer `↵`
 sends, `⇧↵` newline, `Esc` returns to the list.
 
