@@ -101,6 +101,8 @@ class Sync {
       user: m.user || null,
       botName: m.username || null,
       text: plainOf(m),
+      // Bots tag people inside attachments (GitHub: "Reviewers: @Ronak").
+      tagBlob: `${m.text || ''} ${m.attachments ? JSON.stringify(m.attachments) : ''} ${m.blocks ? JSON.stringify(m.blocks) : ''}`,
       threadTs: thread,
       isReply: !!thread && thread !== m.ts,
     };
@@ -151,7 +153,7 @@ class Sync {
           continue;
         }
 
-        const mention = this.mentionsMe(n.text);
+        const mention = this.mentionsMe(n.tagBlob || n.text);
         const member = this.dir.member.has(n.channel) || !this.dir.fetchedAt;
         const muted = this.store.isMuted(n.channel) || (d.mutes.local[n.channel]);
         let include = (member || mention) && (!muted || mention);
