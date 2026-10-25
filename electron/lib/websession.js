@@ -39,38 +39,104 @@ class WebSession {
     return want.map((c) => `${c.name}=${c.value}`).join('; ');
   }
 
-  // Opens a real Slack sign-in window. Resolves once the client has loaded and
-  // we've lifted the workspace token out of its localStorage.
-  signIn(teamId) {
+  // The web client's token, read with just the `d` cookie: workspace pages
+  // embed it in their boot data as "api_token":"xoxc-…".
+  async _tokenFromCookie() {
+    const cookie = await this._cookieHeader();
+    if (!cookie) return null;
+    const hosts = [this.domain && `https://${this.domain}.slack.com/customize/emoji`, this.domain && `https://${this.domain}.slack.com/`, 'https://app.slack.com/'].filter(Boolean);
+    for (const url of hosts) {
+      try {
+        const res = await fetch(url, { headers: { Cookie: cookie, 'User-Agent': UA } });
+        const m = /"api_token":"(xoxc-[^"]+)"/.exec(await res.text());
+        if (m) return m[1];
+      } catch { /* try the next page */ }
+    }
+    return null;
+  }
+
+  // Fallback: once app.slack.com/client has booted, it keeps the token in
+  // localStorage. Checks every window in our partition (sign-in may finish in
+  // a popup).
+  async _tokenFromWindows() {
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (w.isDestroyed() || w.webContents.session !== this.ses) continue;
+      try {
+        const tok = await w.webContents.executeJavaScript(`(() => {
+          try {
+            const teams = (JSON.parse(localStorage.getItem('localConfig_v2') || '{}').teams) || {};
+            const t = teams[${JSON.stringify(this.teamId || '')}] || Object.values(teams)[0];
+            return (t && t.token) || null;
+          } catch (e) { return null; }
+        })()`);
+        if (tok) return tok;
+      } catch { /* mid-navigation */ }
+    }
+    return null;
+  }
+
+  _adopt(tok) {
+    if (!tok || !tok.startsWith('xoxc-')) return false;
+    this.token = tok;
+    this._save();
+    return true;
+  }
+
+  // Opens a real Slack sign-in window and resolves once we hold the web
+  // client token. Slack's login ends on a "Launching <workspace>" page that
+  // hands off to the desktop app (slack://); we block that hand-off and load
+  // the browser client instead, and also read the token straight off the
+  // session cookie, so either path completes sign-in.
+  async signIn(teamId, domain) {
     if (teamId) this.teamId = teamId;
+    if (domain) this.domain = domain;
+    if (this._adopt(await this._tokenFromCookie())) return true; // already signed in
     if (this.win && !this.win.isDestroyed()) { this.win.focus(); return this._pending; }
+
+    const clientUrl = `https://app.slack.com/client/${this.teamId || ''}`;
     this.win = new BrowserWindow({
       width: 980, height: 760, title: 'Sign in to Slack',
       webPreferences: { partition: PARTITION, contextIsolation: true, nodeIntegration: false },
     });
-    this.win.loadURL(`https://app.slack.com/client/${this.teamId || ''}`, { userAgent: UA });
+    const wc = this.win.webContents;
+    // Keep the whole flow in this one window.
+    wc.setWindowOpenHandler(({ url }) => {
+      if (/^https:\/\//.test(url)) setImmediate(() => this.win && !this.win.isDestroyed() && this.win.loadURL(url, { userAgent: UA }));
+      return { action: 'deny' };
+    });
+    const guard = (e, url) => {
+      if (!/^https?:/.test(url)) { e.preventDefault(); this.win.loadURL(clientUrl, { userAgent: UA }); }
+    };
+    wc.on('will-navigate', guard);
+    wc.on('will-frame-navigate', (e) => guard(e, e.url));
+    wc.on('did-navigate', (_e, url) => {
+      if (/\/ssb\/redirect|\/launch/.test(url)) this.win.loadURL(clientUrl, { userAgent: UA });
+    });
+    this.win.loadURL(clientUrl, { userAgent: UA });
+
     this._pending = new Promise((resolve) => {
+      let busy = false;
+      const finish = (ok) => {
+        clearInterval(poll);
+        if (this.win && !this.win.isDestroyed()) this.win.close();
+        resolve(ok);
+      };
       const poll = setInterval(async () => {
-        if (!this.win || this.win.isDestroyed()) { clearInterval(poll); resolve(this.connected); return; }
+        if (busy) return;
+        busy = true;
         try {
-          const tok = await this.win.webContents.executeJavaScript(`(() => {
-            try {
-              const cfg = JSON.parse(localStorage.getItem('localConfig_v2') || '{}');
-              const teams = cfg.teams || {};
-              const t = teams[${JSON.stringify(this.teamId || '')}] || Object.values(teams)[0];
-              return t && t.token || null;
-            } catch (e) { return null; }
-          })()`);
-          if (tok && tok.startsWith('xoxc-') && await this._cookieHeader()) {
-            this.token = tok;
-            this._save();
-            clearInterval(poll);
-            this.win.close();
-            resolve(true);
-          }
-        } catch { /* page mid-navigation */ }
+          if (this._adopt(await this._tokenFromWindows()) && await this._cookieHeader()) return finish(true);
+          if (this._adopt(await this._tokenFromCookie())) return finish(true);
+          if (!this.win || this.win.isDestroyed()) { clearInterval(poll); resolve(this.connected); }
+        } finally { busy = false; }
       }, 1500);
-      this.win.on('closed', () => { this.win = null; });
+      this.win.on('closed', async () => {
+        this.win = null;
+        // Closed by hand right after logging in? The cookie may be enough.
+        if (!this.connected) this._adopt(await this._tokenFromCookie());
+        clearInterval(poll);
+        resolve(this.connected);
+      });
     });
     return this._pending;
   }

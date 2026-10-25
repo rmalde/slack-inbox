@@ -150,7 +150,7 @@ function viewItem(it) {
 
 function updateBadge() {
   if (!app.dock) return;
-  const n = Object.values(store.items).filter((i) => !Store.isArchived(i) && Store.isUnread(i) && section(i) === 'you').length;
+  const n = Object.values(store.items).filter((i) => visible(i) && !Store.isArchived(i) && Store.isUnread(i) && section(i) === 'you').length;
   app.dock.setBadge(n ? String(n) : '');
 }
 
@@ -185,6 +185,13 @@ function schedulePoll(ms) {
 }
 
 async function refreshMutes() {
+  // A finished Slack login leaves its `d` cookie in our partition even if the
+  // sign-in window never captured the token; pick it up silently.
+  if (!web.connected) {
+    web.teamId = store.meta.teamId;
+    web.domain = store.meta.teamDomain;
+    try { if (web._adopt(await web._tokenFromCookie())) send('session-changed'); } catch { /* not signed in */ }
+  }
   if (!web.connected) return;
   try {
     const muted = await web.mutedChannels();
@@ -246,8 +253,12 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 
 // ---- IPC ----------------------------------------------------------------------
 
+// Muted conversations only surface for @mentions — also for rows that landed
+// before the mute list was known. Unmuting brings them back.
+const visible = (it) => it.mention || !store.isMuted(it.channel);
+
 ipcMain.handle('inbox:list', () => ({
-  items: Object.values(store.items).map(viewItem),
+  items: Object.values(store.items).filter(visible).map(viewItem),
   status: {
     ...sync.status,
     hasToken: !!slack.getToken(),
@@ -342,7 +353,7 @@ ipcMain.handle('mute:toggleLocal', (_e, channel) => {
 });
 
 ipcMain.handle('session:signIn', async () => {
-  const ok = await web.signIn(store.meta.teamId);
+  const ok = await web.signIn(store.meta.teamId, store.meta.teamDomain);
   if (ok) await refreshMutes();
   send('session-changed');
   return ok;
