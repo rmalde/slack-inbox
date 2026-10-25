@@ -145,6 +145,7 @@ function viewItem(it) {
     section: section(it),
     threadTs: it.threadTs,
     openedTs: it.openedTs,
+    firstUnreadTs: it.firstUnreadTs || null,
   };
 }
 
@@ -283,21 +284,21 @@ ipcMain.handle('item:messages', async (_e, key) => {
   } catch (e) { return { ok: false, error: e.message }; }
 });
 
-// Opening a DM's threaded reply chip: make (or reuse) a thread item for it.
-ipcMain.handle('item:openThread', (_e, { channel, threadTs }) => {
-  const key = `${channel}:${threadTs}`;
-  store.mutate((d) => {
-    if (d.items[key]) return;
-    d.items[key] = {
-      key, channel, threadTs, kind: 'thread', createdTs: threadTs, lastTs: threadTs,
-      lastIncomingTs: threadTs, openedTs: threadTs, archivedTs: threadTs,
-      rootUser: null, rootText: null, participants: [], newCount: 0, mention: false,
-    };
-  });
-  sync.rootQueue.add(key);
-  sync._drainRoots();
-  changed();
-  return viewItem(store.items[key]);
+// Side-panel threads (replying to a message inside a DM's main stream).
+ipcMain.handle('thread:messages', async (_e, { channel, threadTs }) => {
+  try {
+    return { ok: true, messages: await sync.messagesFor({ kind: 'thread', channel, threadTs }) };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('thread:send', async (_e, { channel, threadTs, text }) => {
+  if (!text || !text.trim()) return { ok: false };
+  try {
+    const r = await slack.call('chat.postMessage', { channel, text, thread_ts: threadTs }, { post: true });
+    // Marks the thread as mine, so later replies land in For you.
+    sync.ingest([{ channel, ts: r.ts, user: store.meta.me, text, threadTs, isReply: true }]);
+    return { ok: true, ts: r.ts };
+  } catch (e) { return { ok: false, error: e.message }; }
 });
 
 ipcMain.handle('item:open', (_e, key) => { store.markOpened(key); changed(); return true; });

@@ -84,7 +84,7 @@ export default function InboxList({ sections, dir, selectedKey, onSelect, view, 
         </div>
         <div className="seg" role="tablist">
           <button type="button" role="tab" className={view === 'inbox' ? 'on' : ''} onClick={() => setView('inbox')}>
-            Inbox{counts.inbox ? <span className="seg-n">{counts.inbox}</span> : null}
+            Inbox{counts.unread ? <span className="seg-n">{counts.unread}</span> : null}
           </button>
           <button type="button" role="tab" className={view === 'archived' ? 'on' : ''} onClick={() => setView('archived')}>Archived</button>
           <span className="seg-thumb" style={{ transform: view === 'inbox' ? 'translateX(0)' : 'translateX(100%)' }} />

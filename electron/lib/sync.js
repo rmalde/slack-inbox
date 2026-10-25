@@ -187,6 +187,8 @@ class Sync {
           if (n.isReply) this.rootQueue.add(key);
         }
         const wasHidden = Store.isArchived(it) || !Store.isUnread(it);
+        // Where reading should resume: the first message that made this row unread.
+        if (Store.isArchived(it) || !Store.isUnread(it)) it.firstUnreadTs = n.ts;
         if (ts(n.ts) >= ts(it.lastTs)) {
           Object.assign(it, { lastTs: n.ts, lastFromMe: false, lastUser: n.user, lastText: n.text, lastBotName: n.botName });
         }

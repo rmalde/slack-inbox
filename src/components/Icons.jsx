@@ -21,3 +21,4 @@ export const CheckIcon = I(<path d="m3.5 8.5 3 3 6-7" />);
 export const SettingsIcon = I(<><circle cx="8" cy="8" r="2" /><path d="M8 1.8v1.6M8 12.6v1.6M14.2 8h-1.6M3.4 8H1.8M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1M12.4 12.4l-1.1-1.1M4.7 4.7 3.6 3.6" /></>);
 export const FileIcon = I(<><path d="M9 2H4.5A1.5 1.5 0 0 0 3 3.5v9A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5V6Z" /><path d="M9 2v4h4" /></>);
 export const ChevronIcon = I(<path d="m6 4 4 4-4 4" />);
+export const CloseIcon = I(<path d="M4 4l8 8M12 4l-8 8" />);

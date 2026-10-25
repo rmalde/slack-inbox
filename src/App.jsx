@@ -75,7 +75,10 @@ export default function App() {
   }, [items, view, matches]);
 
   const flat = useMemo(() => sections.flatMap((s) => (collapsed[s.id] ? [] : s.items)), [sections, collapsed]);
-  const counts = useMemo(() => ({ inbox: items.filter((i) => !i.archived).length }), [items]);
+  const counts = useMemo(() => {
+    const inbox = items.filter((i) => !i.archived);
+    return { inbox: inbox.length, unread: inbox.filter((i) => i.unread).length, archived: items.length - inbox.length };
+  }, [items]);
   const selected = useMemo(() => items.find((i) => i.key === selectedKey) || null, [items, selectedKey]);
 
   // Mark opened when an item becomes the selection.
@@ -151,12 +154,6 @@ export default function App() {
     showToast(on ? `Muted ${selected.title} in Slack Inbox` : `Unmuted ${selected.title}`);
   };
 
-  const openThread = async (channel, threadTs) => {
-    const it = await window.api.openThread({ channel, threadTs });
-    await refresh();
-    if (it) { setViewRaw(it.archived ? 'archived' : 'inbox'); setSelectedKey(it.key); }
-  };
-
   const toggleCollapsed = (id) => setCollapsed((c) => { const n = { ...c, [id]: !c[id] }; savePref('collapsed', n); return n; });
 
   // ---- keyboard ---------------------------------------------------------------
@@ -185,7 +182,6 @@ export default function App() {
       const k = e.key;
       if (k === 'j' || k === 'ArrowDown') { e.preventDefault(); h.move(1); }
       else if (k === 'k' || k === 'ArrowUp') { e.preventDefault(); h.move(-1); }
-      else if (k === 'e' && h.selected) { e.preventDefault(); h.archive([h.selected.key]); }
       else if (k === 'u') { e.preventDefault(); h.markUnread(); }
       else if (k === 'z') { e.preventDefault(); h.undo(); }
       else if (k === 'o' && h.selected) { e.preventDefault(); window.api.openInSlack({ key: h.selected.key }); }
@@ -237,7 +233,12 @@ export default function App() {
           </div>
         )}
         <div className="footer-row">
-          <span className="footer-meta">{status && status.webConnected ? 'Mutes synced from Slack' : 'Mutes: Slack Inbox only'}</span>
+          <span />
+          <span className="footer-meta" title={status && status.webConnected ? 'Mutes synced from Slack' : 'Mutes: Slack Inbox only'}>
+            {view === 'inbox'
+              ? `${counts.inbox} ${counts.inbox === 1 ? 'conversation' : 'conversations'} · ${counts.unread} unread`
+              : `${counts.archived} archived`}
+          </span>
           <button type="button" className="icon-btn" onClick={() => setSettingsOpen((o) => !o)} aria-label="Settings"><SettingsIcon size={15} /></button>
         </div>
         {settingsOpen && settings && (
@@ -250,7 +251,7 @@ export default function App() {
               : <button type="button" className="pop-item" onClick={async () => { await window.api.signIn(); refresh(); }}>Sign in to Slack…</button>}
             <button type="button" className="pop-item" onClick={() => window.api.syncNow()}>Refresh now <kbd>⌘R</kbd></button>
             <div className="pop-keys">
-              <span><kbd>J</kbd><kbd>K</kbd> move</span><span><kbd>E</kbd> archive</span><span><kbd>Z</kbd> undo</span>
+              <span><kbd>J</kbd><kbd>K</kbd> move</span><span><kbd>⌘⇧E</kbd> archive</span><span><kbd>Z</kbd> undo</span>
               <span><kbd>R</kbd> reply</span><span><kbd>U</kbd> unread</span><span><kbd>⌘⇧A</kbd> open in Slack</span>
               <span><kbd>M</kbd> mute here</span><span><kbd>/</kbd> filter</span>
             </div>
@@ -266,7 +267,6 @@ export default function App() {
           onArchive={() => archive([selected.key])}
           onUnread={markUnread}
           onToggleMute={toggleMute}
-          onOpenThread={openThread}
           composerRef={composerRef}
         />
       ) : (

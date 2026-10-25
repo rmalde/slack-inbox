@@ -2,7 +2,7 @@
 
 Slack, reshaped as an email-style inbox. No channels sidebar: every unread
 **thread** is one row (a DM's main conversation is one row too). Read it,
-reply, press **E**, it's gone. A new message in that thread brings it back.
+reply, press **⌘⇧E**, it's gone. A new message in that thread brings it back.
 
 Local-only Electron app. Reads Slack with Ronak's user token
 (`~/.config/slack-user-token`, the same one `~/tech/slack-send` uses), so
@@ -31,7 +31,7 @@ inside Slack Inbox with **M** (stored locally).
 
 ## Keys
 
-`J`/`K` or arrows move · `E` archive (or unarchive in Archived) · `Z` undo ·
+`J`/`K` or arrows move · `⌘⇧E` archive (or unarchive in Archived) · `Z` undo ·
 `R`/`Enter` reply · `U` mark unread · `⌘⇧A` (or `O`) open the thread in the Slack app · `M` mute here ·
 `/` filter · `⌘1`/`⌘2` Inbox/Archived · `⌘R` refresh. In the composer `↵`
 sends, `⇧↵` newline, `Esc` returns to the list.

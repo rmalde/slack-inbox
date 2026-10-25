@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import Avatar from './Avatar';
 import { Mrkdwn, Emoji, plain } from '../lib/mrkdwn';
 import { msgTime, dayLabel, dayKey, fullTime } from '../lib/format';
-import { ArchiveIcon, UnreadIcon, ExternalIcon, MuteIcon, BellIcon, SendIcon, ThreadIcon, SmileIcon, FileIcon, HashIcon, LockIcon } from './Icons';
+import { ArchiveIcon, UnreadIcon, ExternalIcon, MuteIcon, BellIcon, SendIcon, ThreadIcon, FileIcon, HashIcon, LockIcon, CloseIcon } from './Icons';
 
 const QUICK = ['+1', 'white_check_mark', 'eyes', 'heart', 'joy', 'pray'];
 
@@ -52,10 +52,10 @@ function Files({ files, webConnected, ctx }) {
   );
 }
 
-function Message({ m, dir, ctx, compact, isRoot, onReact, onOpenThread, isNew }) {
+function Message({ m, dir, ctx, compact, isRoot, onReact, onOpenThread, isNew, active }) {
   const name = displayName(dir, m);
   return (
-    <div className={`msg${compact ? ' compact' : ''}${isRoot ? ' root' : ''}${isNew ? ' is-new' : ''}`}>
+    <div className={`msg${compact ? ' compact' : ''}${isRoot ? ' root' : ''}${isNew ? ' is-new' : ''}${active ? ' active' : ''}`} data-ts={m.ts}>
       <div className="msg-gutter">
         {compact
           ? <span className="msg-hover-time">{msgTime(m.ts)}</span>
@@ -95,29 +95,32 @@ function Message({ m, dir, ctx, compact, isRoot, onReact, onOpenThread, isNew })
           </button>
         ))}
         <span className="msg-tools-sep" />
+        {onOpenThread && <button type="button" onClick={() => onOpenThread(m)} title="Reply in thread"><ThreadIcon size={14} /></button>}
         <button type="button" onClick={() => ctx.openInSlack(m.ts)} title="Open in Slack"><ExternalIcon size={14} /></button>
       </div>
     </div>
   );
 }
 
-function Composer({ item, dir, onSend, inputRef }) {
+function Composer({ draftKey, placeholder, onSend, inputRef, autoFocus, onEscape, compact }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
-  const drafts = useRef({});
+  const ownRef = useRef(null);
+  const ref = inputRef || ownRef;
 
   useEffect(() => {
-    setText(drafts.current[item.key] || '');
+    setText(DRAFTS[draftKey] || '');
     setError(null);
-  }, [item.key]);
+    if (autoFocus && ref.current) ref.current.focus();
+  }, [draftKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useLayoutEffect(() => {
-    const el = inputRef.current;
+    const el = ref.current;
     if (!el) return;
     el.style.height = '0px';
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
-  }, [text, inputRef]);
+  }, [text, ref]);
 
   const submit = async () => {
     const t = text.trim();
@@ -126,23 +129,22 @@ function Composer({ item, dir, onSend, inputRef }) {
     setError(null);
     const r = await onSend(t);
     setSending(false);
-    if (r && r.ok) { setText(''); drafts.current[item.key] = ''; }
+    if (r && r.ok) { setText(''); DRAFTS[draftKey] = ''; }
     else setError((r && r.error) || 'Could not send');
   };
 
-  const target = item.kind === 'thread' ? 'Reply in thread' : `Message ${item.title}`;
   return (
-    <div className="composer-wrap">
+    <div className={`composer-wrap${compact ? ' compact' : ''}`}>
       <div className={`composer${sending ? ' sending' : ''}`}>
         <textarea
-          ref={inputRef}
+          ref={ref}
           rows={1}
           value={text}
-          placeholder={`${target}…`}
-          onChange={(e) => { setText(e.target.value); drafts.current[item.key] = e.target.value; }}
+          placeholder={placeholder}
+          onChange={(e) => { setText(e.target.value); DRAFTS[draftKey] = e.target.value; }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); }
-            if (e.key === 'Escape') e.currentTarget.blur();
+            if (e.key === 'Escape') { e.stopPropagation(); e.currentTarget.blur(); if (onEscape) onEscape(); }
           }}
         />
         <button type="button" className="send" disabled={!text.trim() || sending} onClick={submit} aria-label="Send">
@@ -150,62 +152,90 @@ function Composer({ item, dir, onSend, inputRef }) {
         </button>
       </div>
       <div className="composer-hint">
-        {error ? <span className="err">{error}</span> : <><kbd>↵</kbd> send <kbd>⇧↵</kbd> newline <kbd>esc</kbd> back to list</>}
+        {error ? <span className="err">{error}</span> : <><kbd>↵</kbd> send <kbd>⇧↵</kbd> newline <kbd>esc</kbd> {onEscape ? 'close' : 'back to list'}</>}
       </div>
     </div>
   );
 }
 
-export default function Reader({ item, dir, webConnected, onArchive, onUnread, onToggleMute, onOpenThread, composerRef, onAfterSend }) {
-  const [messages, setMessages] = useState(null);
-  const [error, setError] = useState(null);
+// Unsent text per conversation/thread, kept across switching rows.
+const DRAFTS = {};
+
+const tsn = (s) => parseFloat(s || 0);
+
+// The message reading should resume at, from the row's state when it was opened.
+function firstUnread(messages, snap, me) {
+  if (!snap || !snap.unread || !messages.length) return null;
+  const incoming = messages.filter((m) => m.user !== me);
+  let hit = null;
+  if (snap.firstUnreadTs && tsn(snap.firstUnreadTs) > tsn(snap.openedTs)) {
+    hit = messages.find((m) => tsn(m.ts) >= tsn(snap.firstUnreadTs));
+  } else if (tsn(snap.openedTs) > 0) {
+    hit = incoming.find((m) => tsn(m.ts) > tsn(snap.openedTs));
+  } else if (incoming.length) {
+    hit = incoming[Math.max(0, incoming.length - Math.max(1, snap.newCount || 1))];
+  }
+  return hit ? hit.ts : null;
+}
+
+// Scrolls a message list: to the first-unread divider once, then sticks to
+// the bottom as new messages arrive (unless the reader scrolled up).
+function useThreadScroll(messages, resetKey) {
   const scrollRef = useRef(null);
   const stick = useRef(true);
-  const newSince = useRef(null);
-  const key = item && item.key;
-  const lastTs = item && item.lastTs;
-
-  const load = useCallback(async () => {
-    if (!key) return;
-    const r = await window.api.messages(key);
-    if (r.ok) { setMessages(r.messages); setError(null); }
-    else setError(r.error);
-  }, [key]);
-
-  // Reset when switching items; capture the unread boundary before it's cleared.
-  useEffect(() => {
-    setMessages(null);
-    setError(null);
-    stick.current = true;
-    newSince.current = item && item.unread ? item.openedTs : null;
-    load();
-    const t = setInterval(load, 8000);
-    return () => clearInterval(t);
-  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => { if (key) load(); }, [lastTs]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  const pending = useRef(true);
+  useEffect(() => { stick.current = true; pending.current = true; }, [resetKey]);
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el || !messages) return;
-    if (stick.current) {
-      const firstNew = el.querySelector('.new-divider');
-      if (firstNew && newSince.current && firstNew.offsetTop < el.scrollHeight - el.clientHeight) {
-        el.scrollTop = Math.max(0, firstNew.offsetTop - 80);
-        newSince.current = null;
-      } else el.scrollTop = el.scrollHeight;
+    if (pending.current) {
+      pending.current = false;
+      const div = el.querySelector('.new-divider');
+      if (div) {
+        el.scrollTop += div.getBoundingClientRect().top - el.getBoundingClientRect().top - 72;
+        stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+        return;
+      }
+      el.scrollTop = el.scrollHeight;
+      return;
     }
+    if (stick.current) el.scrollTop = el.scrollHeight;
   }, [messages]);
-
-  if (!item) return null;
-
-  const ctx = {
-    webConnected,
-    openExternal: (u) => window.api.openExternal(u),
-    openInSlack: (ts) => window.api.openInSlack({ key: item.key, ts }),
+  const onScroll = (e) => {
+    const el = e.currentTarget;
+    stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
   };
+  return { scrollRef, onScroll, stick };
+}
 
-  const react = async (m, name, remove) => {
+function MessageList({ messages, dir, ctx, isThread, boundary, onReact, onOpenThread, activeTs }) {
+  let prev = null;
+  return messages.map((m, i) => {
+    const out = [];
+    const isRoot = isThread && i === 0;
+    if (!isRoot && (!prev || dayKey(prev.ts) !== dayKey(m.ts))) {
+      out.push(<div key={`d${m.ts}`} className="day"><span>{dayLabel(m.ts)}</span></div>);
+    }
+    const isBoundary = boundary && m.ts === boundary && i > 0;
+    if (isBoundary) out.push(<div key={`n${m.ts}`} className="new-divider"><span>New</span></div>);
+    const compact = !isRoot && !isBoundary && prev && prev.user === m.user && !m.botName === !prev.botName
+      && tsn(m.ts) - tsn(prev.ts) < 300 && dayKey(prev.ts) === dayKey(m.ts) && !(i === 1 && isThread);
+    out.push(
+      <Message key={m.ts} m={m} dir={dir} ctx={ctx} compact={compact} isRoot={isRoot}
+        isNew={boundary && tsn(m.ts) >= tsn(boundary) && m.user !== dir.me}
+        active={activeTs === m.ts}
+        onReact={onReact} onOpenThread={onOpenThread} />
+    );
+    if (isRoot && messages.length > 1) {
+      out.push(<div key="replies" className="replies-rule"><span>{messages.length - 1} {messages.length === 2 ? 'reply' : 'replies'}</span></div>);
+    }
+    prev = m;
+    return out;
+  });
+}
+
+function useReactions(setMessages, channel) {
+  return async (m, name, remove) => {
     setMessages((ms) => ms && ms.map((x) => {
       if (x.ts !== m.ts) return x;
       let rs = x.reactions.map((r) => ({ ...r }));
@@ -215,8 +245,109 @@ export default function Reader({ item, dir, webConnected, onArchive, onUnread, o
       else rs.push({ name, count: 1, me: true });
       return { ...x, reactions: rs };
     }));
-    await window.api.react({ channel: item.channel, ts: m.ts, name, remove });
+    await window.api.react({ channel, ts: m.ts, name, remove });
   };
+}
+
+// Slack-style side panel: a thread opened from a DM's main stream.
+function ThreadPanel({ channel, threadTs, dir, ctx, onClose, title }) {
+  const [messages, setMessages] = useState(null);
+  const [error, setError] = useState(null);
+  const tkey = `${channel}:${threadTs}`;
+  const { scrollRef, onScroll, stick } = useThreadScroll(messages, tkey);
+
+  const load = useCallback(async () => {
+    const r = await window.api.threadMessages({ channel, threadTs });
+    if (r.ok) { setMessages(r.messages); setError(null); } else setError(r.error);
+  }, [channel, threadTs]);
+
+  useEffect(() => {
+    setMessages(null);
+    load();
+    const t = setInterval(load, 8000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  const react = useReactions(setMessages, channel);
+  const send = async (text) => {
+    const r = await window.api.threadSend({ channel, threadTs, text });
+    if (r.ok) { stick.current = true; await load(); }
+    return r;
+  };
+
+  return (
+    <aside className="thread-panel">
+      <header className="thread-head">
+        <div>
+          <div className="thread-title">Thread</div>
+          <div className="thread-sub">{title}</div>
+        </div>
+        <button type="button" className="tool" onClick={onClose} title="Close (esc)"><CloseIcon /></button>
+      </header>
+      <div className="thread-scroll" ref={scrollRef} onScroll={onScroll}>
+        <div className="thread-inner">
+          {error && <div className="reader-error">Couldn’t load thread · {error}</div>}
+          {!messages && !error && <LoadingMessages />}
+          {messages && <MessageList messages={messages} dir={dir} ctx={{ ...ctx, openInSlack: (ts) => ctx.openInSlack(ts || threadTs) }} isThread onReact={react} />}
+        </div>
+      </div>
+      <Composer draftKey={tkey} placeholder="Reply in thread…" onSend={send} autoFocus onEscape={onClose} compact />
+    </aside>
+  );
+}
+
+export default function Reader({ item, dir, webConnected, onArchive, onUnread, onToggleMute, composerRef, onAfterSend }) {
+  const [messages, setMessages] = useState(null);
+  const [error, setError] = useState(null);
+  const [panel, setPanel] = useState(null); // { threadTs } of an open side thread
+  const snap = useRef(null);
+  const boundary = useRef(undefined);
+  const key = item && item.key;
+  const lastTs = item && item.lastTs;
+  const { scrollRef, onScroll, stick } = useThreadScroll(messages, key);
+
+  const load = useCallback(async () => {
+    if (!key) return;
+    const r = await window.api.messages(key);
+    if (r.ok) { setMessages(r.messages); setError(null); }
+    else setError(r.error);
+  }, [key]);
+
+  // Reset when switching rows; snapshot unread state before opening clears it.
+  useEffect(() => {
+    setMessages(null);
+    setError(null);
+    setPanel(null);
+    snap.current = item ? { unread: item.unread, openedTs: item.openedTs, newCount: item.newCount, firstUnreadTs: item.firstUnreadTs } : null;
+    boundary.current = undefined;
+    load();
+    const t = setInterval(load, 8000);
+    return () => clearInterval(t);
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { if (key) load(); }, [lastTs]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!panel) return undefined;
+    const onKey = (e) => {
+      const t = e.target;
+      if (e.key === 'Escape' && !(t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT'))) setPanel(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [panel]);
+
+  if (!item) return null;
+
+  if (messages && boundary.current === undefined) boundary.current = firstUnread(messages, snap.current, dir.me);
+
+  const ctx = {
+    webConnected,
+    openExternal: (u) => window.api.openExternal(u),
+    openInSlack: (ts) => window.api.openInSlack({ key: item.key, ts }),
+  };
+
+  const react = useReactions(setMessages, item.channel);
 
   const send = async (text) => {
     const r = await window.api.send({ key: item.key, text });
@@ -225,72 +356,55 @@ export default function Reader({ item, dir, webConnected, onArchive, onUnread, o
   };
 
   const isChannel = item.convKind === 'channel';
-  const boundary = newSince.current;
-  let prev = null;
-  let newShown = false;
+  const isThread = item.kind === 'thread';
 
   return (
-    <main className="reader">
-      <header className="reader-header">
-        <div className="drag" />
-        <div className="reader-title">
-          <div className="reader-kicker">
-            {isChannel ? (item.isPrivate ? <LockIcon size={12} /> : <HashIcon size={12} />) : null}
-            <span>{isChannel ? item.title.replace(/^#/, '') : item.convKind === 'mpim' ? 'Group message' : 'Direct message'}</span>
-            {item.kind === 'thread' && <span className="dot-sep">Thread</span>}
-            {item.ext && <span className="ext-tag">External</span>}
+    <main className={`reader${panel ? ' with-panel' : ''}`}>
+      <div className="reader-main">
+        <header className="reader-header">
+          <div className="drag" />
+          <div className="reader-title">
+            <div className="reader-kicker">
+              {isChannel ? (item.isPrivate ? <LockIcon size={12} /> : <HashIcon size={12} />) : null}
+              <span>{isChannel ? item.title.replace(/^#/, '') : item.convKind === 'mpim' ? 'Group message' : 'Direct message'}</span>
+              {isThread && <span className="dot-sep">Thread</span>}
+              {item.ext && <span className="ext-tag">External</span>}
+            </div>
+            <h2>{isThread && item.rootText != null
+              ? (plain(item.rootText, dir).slice(0, 140) || item.title)
+              : item.title}</h2>
           </div>
-          <h2>{item.kind === 'thread' && item.rootText != null
-            ? (plain(item.rootText, dir).slice(0, 140) || item.title)
-            : item.title}</h2>
-        </div>
-        <div className="reader-actions">
-          <button type="button" className="tool" onClick={onToggleMute} title={item.muted ? 'Unmute here (⌘⇧M)' : 'Mute this conversation here (⌘⇧M)'}>
-            {item.muted ? <BellIcon /> : <MuteIcon />}
-          </button>
-          <button type="button" className="tool" onClick={() => ctx.openInSlack()} title="Open thread in Slack (⌘⇧A)"><ExternalIcon /></button>
-          <button type="button" className="tool" onClick={onUnread} title="Mark unread (u)"><UnreadIcon /></button>
-          <button type="button" className="tool primary" onClick={onArchive} title={item.archived ? 'Move to Inbox (e)' : 'Archive (e)'}>
-            <ArchiveIcon /> <span>{item.archived ? 'Unarchive' : 'Archive'}</span> <kbd>E</kbd>
-          </button>
-        </div>
-      </header>
+          <div className="reader-actions">
+            <button type="button" className="tool" onClick={onToggleMute} title={item.muted ? 'Unmute here (⌘⇧M)' : 'Mute this conversation here (⌘⇧M)'}>
+              {item.muted ? <BellIcon /> : <MuteIcon />}
+            </button>
+            <button type="button" className="tool" onClick={() => ctx.openInSlack()} title="Open thread in Slack (⌘⇧A)"><ExternalIcon /></button>
+            <button type="button" className="tool" onClick={onUnread} title="Mark unread (u)"><UnreadIcon /></button>
+            <button type="button" className="tool primary" onClick={onArchive} title={item.archived ? 'Move to Inbox (⌘⇧E)' : 'Archive (⌘⇧E)'}>
+              <ArchiveIcon /> <span>{item.archived ? 'Unarchive' : 'Archive'}</span> <kbd>⌘⇧E</kbd>
+            </button>
+          </div>
+        </header>
 
-      <div className="reader-scroll" ref={scrollRef} onScroll={(e) => {
-        const el = e.currentTarget;
-        stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-      }}>
-        <div className="reader-inner">
-          {error && <div className="reader-error">Couldn’t load this conversation · {error}</div>}
-          {!messages && !error && <LoadingMessages />}
-          {messages && messages.map((m, i) => {
-            const out = [];
-            const isRoot = item.kind === 'thread' && i === 0;
-            if (!prev || dayKey(prev.ts) !== dayKey(m.ts)) {
-              if (!(isRoot)) out.push(<div key={`d${m.ts}`} className="day"><span>{dayLabel(m.ts)}</span></div>);
-            }
-            if (boundary && !newShown && parseFloat(m.ts) > parseFloat(boundary) && m.user !== dir.me) {
-              newShown = true;
-              out.push(<div key={`n${m.ts}`} className="new-divider"><span>New</span></div>);
-            }
-            const compact = !isRoot && prev && prev.user === m.user && !m.botName === !prev.botName
-              && parseFloat(m.ts) - parseFloat(prev.ts) < 300 && dayKey(prev.ts) === dayKey(m.ts) && !(i === 1 && item.kind === 'thread');
-            out.push(
-              <Message key={m.ts} m={m} dir={dir} ctx={ctx} compact={compact} isRoot={isRoot}
-                isNew={newShown && parseFloat(m.ts) > parseFloat(boundary || 0)}
+        <div className="reader-scroll" ref={scrollRef} onScroll={onScroll}>
+          <div className="reader-inner">
+            {error && <div className="reader-error">Couldn’t load this conversation · {error}</div>}
+            {!messages && !error && <LoadingMessages />}
+            {messages && (
+              <MessageList messages={messages} dir={dir} ctx={ctx} isThread={isThread} boundary={boundary.current}
+                activeTs={panel && panel.threadTs}
                 onReact={react}
-                onOpenThread={item.kind === 'dm' ? (mm) => onOpenThread(item.channel, mm.ts) : null} />
-            );
-            if (isRoot && messages.length > 1) {
-              out.push(<div key="replies" className="replies-rule"><span>{messages.length - 1} {messages.length === 2 ? 'reply' : 'replies'}</span></div>);
-            }
-            prev = m;
-            return out;
-          })}
+                onOpenThread={isThread ? null : (m) => setPanel({ threadTs: m.threadTs || m.ts })} />
+            )}
+          </div>
         </div>
-      </div>
 
-      <Composer item={item} dir={dir} onSend={send} inputRef={composerRef} />
+        <Composer draftKey={item.key} placeholder={`${isThread ? 'Reply in thread' : `Message ${item.title}`}…`} onSend={send} inputRef={composerRef} />
+      </div>
+      {panel && (
+        <ThreadPanel channel={item.channel} threadTs={panel.threadTs} dir={dir} ctx={ctx} title={item.title}
+          onClose={() => setPanel(null)} />
+      )}
     </main>
   );
 }

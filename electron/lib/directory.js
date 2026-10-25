@@ -63,11 +63,16 @@ class Directory {
 
   // Group DMs are named "mpdm-a--b--c-1"; fetch members for real names.
   async _fillMpims() {
+    for (const c of Object.values(this.convs)) {
+      if (c.mpim && c.members) for (const m of c.members) if (!this.users[m]) await this.ensureUser(m);
+    }
     for (const [id, c] of Object.entries(this.convs)) {
       if (c.mpim && !c.members) {
         try {
           const r = await slack.call('conversations.members', { channel: id, limit: 50 });
           c.members = r.members;
+          // Slack Connect guests aren't in users.list.
+          await Promise.all(r.members.map((m) => this.ensureUser(m)));
         } catch { /* fall back to the mpdm name */ }
       }
     }
