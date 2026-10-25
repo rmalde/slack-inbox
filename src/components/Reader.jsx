@@ -364,15 +364,12 @@ export default function Reader({ item, dir, webConnected, onArchive, onUnread, o
         <header className="reader-header">
           <div className="drag" />
           <div className="reader-title">
-            <div className="reader-kicker">
-              {isChannel ? (item.isPrivate ? <LockIcon size={12} /> : <HashIcon size={12} />) : null}
-              <span>{isChannel ? item.title.replace(/^#/, '') : item.convKind === 'mpim' ? 'Group message' : 'Direct message'}</span>
-              {isThread && <span className="dot-sep">Thread</span>}
-              {item.ext && <span className="ext-tag">External</span>}
-            </div>
-            <h2>{isThread && item.rootText != null
-              ? (plain(item.rootText, dir).slice(0, 140) || item.title)
-              : item.title}</h2>
+            {isChannel ? (item.isPrivate ? <LockIcon size={14} /> : <HashIcon size={14} />) : null}
+            <h2>{isChannel ? item.title.replace(/^#/, '') : item.title}</h2>
+            {item.ext && <span className="ext-tag">External</span>}
+            {isThread && item.rootText != null && (
+              <span className="reader-sub"><span className="reader-sub-sep">Thread</span>{plain(item.rootText, dir).slice(0, 160)}</span>
+            )}
           </div>
           <div className="reader-actions">
             <button type="button" className="tool" onClick={onToggleMute} title={item.muted ? 'Unmute here (⌘⇧M)' : 'Mute this conversation here (⌘⇧M)'}>
