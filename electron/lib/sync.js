@@ -324,10 +324,10 @@ class Sync {
 
   // ---- reading a thread --------------------------------------------------
 
-  async messagesFor(it) {
+  async messagesFor(it, { limit = 60 } = {}) {
     let raw;
     if (it.kind === 'dm') {
-      const r = await slack.call('conversations.history', { channel: it.channel, limit: 60 });
+      const r = await slack.call('conversations.history', { channel: it.channel, limit });
       raw = (r.messages || []).reverse();
     } else {
       const r = await slack.call('conversations.replies', { channel: it.channel, ts: it.threadTs, limit: 200 });

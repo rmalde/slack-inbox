@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('api', {
   messages: inv('item:messages'),
   threadMessages: inv('thread:messages'),
   threadSend: inv('thread:send'),
+  channelMessages: inv('channel:messages'),
+  channelSend: inv('channel:send'),
   open: inv('item:open'),
   markUnread: inv('item:unread'),
   archive: inv('item:archive'),

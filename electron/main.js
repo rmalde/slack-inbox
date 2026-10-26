@@ -301,6 +301,23 @@ ipcMain.handle('thread:send', async (_e, { channel, threadTs, text }) => {
   } catch (e) { return { ok: false, error: e.message }; }
 });
 
+// Full conversation view (opened from a thread's header): the channel or
+// DM's main stream, read and posted to without making it an inbox row.
+ipcMain.handle('channel:messages', async (_e, { channel }) => {
+  try {
+    return { ok: true, messages: await sync.messagesFor({ kind: 'dm', channel }, { limit: 200 }) };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('channel:send', async (_e, { channel, text }) => {
+  if (!text || !text.trim()) return { ok: false };
+  try {
+    const r = await slack.call('chat.postMessage', { channel, text }, { post: true });
+    sync.ingest([{ channel, ts: r.ts, user: store.meta.me, text, threadTs: null, isReply: false }]);
+    return { ok: true, ts: r.ts };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
 ipcMain.handle('item:open', (_e, key) => { store.markOpened(key); changed(); return true; });
 ipcMain.handle('item:unread', (_e, key) => { store.markUnread(key); changed(); return true; });
 

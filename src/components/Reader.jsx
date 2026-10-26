@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import Avatar from './Avatar';
 import { Mrkdwn, Emoji, plain } from '../lib/mrkdwn';
 import { msgTime, dayLabel, dayKey, fullTime } from '../lib/format';
-import { ArchiveIcon, UnreadIcon, ExternalIcon, MuteIcon, BellIcon, SendIcon, ThreadIcon, FileIcon, HashIcon, LockIcon, CloseIcon } from './Icons';
+import { ArchiveIcon, UnreadIcon, ExternalIcon, MuteIcon, BellIcon, SendIcon, ThreadIcon, FileIcon, HashIcon, LockIcon, CloseIcon, ChevronIcon } from './Icons';
 
 const QUICK = ['+1', 'white_check_mark', 'eyes', 'heart', 'joy', 'pray'];
 
@@ -151,9 +151,7 @@ function Composer({ draftKey, placeholder, onSend, inputRef, autoFocus, onEscape
           <SendIcon size={15} />
         </button>
       </div>
-      <div className="composer-hint">
-        {error ? <span className="err">{error}</span> : <><kbd>↵</kbd> send <kbd>⇧↵</kbd> newline <kbd>esc</kbd> {onEscape ? 'close' : 'back to list'}</>}
-      </div>
+      {error && <div className="composer-error">{error}</div>}
     </div>
   );
 }
@@ -180,7 +178,7 @@ function firstUnread(messages, snap, me) {
 
 // Scrolls a message list: to the first-unread divider once, then sticks to
 // the bottom as new messages arrive (unless the reader scrolled up).
-function useThreadScroll(messages, resetKey) {
+function useThreadScroll(messages, resetKey, focusTs) {
   const scrollRef = useRef(null);
   const stick = useRef(true);
   const pending = useRef(true);
@@ -190,6 +188,12 @@ function useThreadScroll(messages, resetKey) {
     if (!el || !messages) return;
     if (pending.current) {
       pending.current = false;
+      const focus = focusTs && el.querySelector(`.msg[data-ts="${focusTs}"]`);
+      if (focus) {
+        el.scrollTop += focus.getBoundingClientRect().top - el.getBoundingClientRect().top - 96;
+        stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+        return;
+      }
       const div = el.querySelector('.new-divider');
       if (div) {
         el.scrollTop += div.getBoundingClientRect().top - el.getBoundingClientRect().top - 72;
@@ -300,46 +304,71 @@ export default function Reader({ item, dir, webConnected, onArchive, onUnread, o
   const [messages, setMessages] = useState(null);
   const [error, setError] = useState(null);
   const [panel, setPanel] = useState(null); // { threadTs } of an open side thread
+  // Conversation mode: the thread's whole channel/DM, opened from the header.
+  const [conv, setConv] = useState(false);
   const snap = useRef(null);
   const boundary = useRef(undefined);
   const key = item && item.key;
   const lastTs = item && item.lastTs;
-  const { scrollRef, onScroll, stick } = useThreadScroll(messages, key);
+  const channel = item && item.channel;
+  const threadTs = item && item.threadTs;
+  const { scrollRef, onScroll, stick } = useThreadScroll(messages, `${key}|${conv}`, conv ? threadTs : null);
 
   const load = useCallback(async () => {
     if (!key) return;
-    const r = await window.api.messages(key);
+    const r = conv ? await window.api.channelMessages({ channel }) : await window.api.messages(key);
     if (r.ok) { setMessages(r.messages); setError(null); }
     else setError(r.error);
-  }, [key]);
+  }, [key, conv, channel]);
+  const loadRef = useRef(load);
+  loadRef.current = load;
 
   // Reset when switching rows; snapshot unread state before opening clears it.
   useEffect(() => {
     setMessages(null);
     setError(null);
     setPanel(null);
+    setConv(false);
     snap.current = item ? { unread: item.unread, openedTs: item.openedTs, newCount: item.newCount, firstUnreadTs: item.firstUnreadTs } : null;
     boundary.current = undefined;
     load();
-    const t = setInterval(load, 8000);
+    const t = setInterval(() => loadRef.current(), 8000);
     return () => clearInterval(t);
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { if (key) load(); }, [lastTs]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Entering/leaving conversation mode swaps the message source (the 8s
+  // refresh above always calls the current loader through loadRef).
+  const firstConv = useRef(true);
   useEffect(() => {
-    if (!panel) return undefined;
+    if (firstConv.current) { firstConv.current = false; return; }
+    setMessages(null);
+    setError(null);
+    load();
+  }, [conv]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openConversation = () => {
+    setConv(true);
+    // Keep the thread you came from open beside the channel, like Slack.
+    setPanel({ threadTs: item.threadTs });
+  };
+  const backToThread = () => { setConv(false); setPanel(null); };
+
+  useEffect(() => {
+    if (!panel && !conv) return undefined;
     const onKey = (e) => {
       const t = e.target;
-      if (e.key === 'Escape' && !(t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT'))) setPanel(null);
+      if (e.key !== 'Escape' || (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT'))) return;
+      if (panel) setPanel(null); else setConv(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [panel]);
+  }, [panel, conv]);
 
   if (!item) return null;
 
-  if (messages && boundary.current === undefined) boundary.current = firstUnread(messages, snap.current, dir.me);
+  if (messages && !conv && boundary.current === undefined) boundary.current = firstUnread(messages, snap.current, dir.me);
 
   const ctx = {
     webConnected,
@@ -350,13 +379,16 @@ export default function Reader({ item, dir, webConnected, onArchive, onUnread, o
   const react = useReactions(setMessages, item.channel);
 
   const send = async (text) => {
-    const r = await window.api.send({ key: item.key, text });
+    const r = conv ? await window.api.channelSend({ channel, text }) : await window.api.send({ key: item.key, text });
     if (r.ok) { stick.current = true; await load(); onAfterSend && onAfterSend(); }
     return r;
   };
 
   const isChannel = item.convKind === 'channel';
-  const isThread = item.kind === 'thread';
+  const isThread = item.kind === 'thread' && !conv;
+  const canOpenConv = item.kind === 'thread' && !conv;
+  const name = isChannel ? item.title.replace(/^#/, '') : item.title;
+  const chanIcon = isChannel ? (item.isPrivate ? <LockIcon size={14} /> : <HashIcon size={14} />) : null;
 
   return (
     <main className={`reader${panel ? ' with-panel' : ''}`}>
@@ -364,8 +396,16 @@ export default function Reader({ item, dir, webConnected, onArchive, onUnread, o
         <header className="reader-header">
           <div className="drag" />
           <div className="reader-title">
-            {isChannel ? (item.isPrivate ? <LockIcon size={14} /> : <HashIcon size={14} />) : null}
-            <h2>{isChannel ? item.title.replace(/^#/, '') : item.title}</h2>
+            {conv && (
+              <button type="button" className="tool back" onClick={backToThread} title="Back to thread (esc)"><ChevronIcon size={14} /> Thread</button>
+            )}
+            {canOpenConv ? (
+              <button type="button" className="title-link" onClick={openConversation} title={`Open ${isChannel ? `#${name}` : name}`}>
+                {chanIcon}<h2>{name}</h2>
+              </button>
+            ) : (
+              <>{chanIcon}<h2>{name}</h2></>
+            )}
             {item.ext && <span className="ext-tag">External</span>}
             {isThread && item.rootText != null && (
               <span className="reader-sub"><span className="reader-sub-sep">Thread</span>{plain(item.rootText, dir).slice(0, 160)}</span>
@@ -388,7 +428,7 @@ export default function Reader({ item, dir, webConnected, onArchive, onUnread, o
             {error && <div className="reader-error">Couldn’t load this conversation · {error}</div>}
             {!messages && !error && <LoadingMessages />}
             {messages && (
-              <MessageList messages={messages} dir={dir} ctx={ctx} isThread={isThread} boundary={boundary.current}
+              <MessageList messages={messages} dir={dir} ctx={ctx} isThread={isThread} boundary={conv ? null : boundary.current}
                 activeTs={panel && panel.threadTs}
                 onReact={react}
                 onOpenThread={isThread ? null : (m) => setPanel({ threadTs: m.threadTs || m.ts })} />
@@ -396,7 +436,7 @@ export default function Reader({ item, dir, webConnected, onArchive, onUnread, o
           </div>
         </div>
 
-        <Composer draftKey={item.key} placeholder={`${isThread ? 'Reply in thread' : `Message ${item.title}`}…`} onSend={send} inputRef={composerRef} />
+        <Composer draftKey={conv ? `${channel}:conv` : item.key} placeholder={`${isThread ? 'Reply in thread' : `Message ${isChannel ? `#${name}` : name}`}…`} onSend={send} inputRef={composerRef} />
       </div>
       {panel && (
         <ThreadPanel channel={item.channel} threadTs={panel.threadTs} dir={dir} ctx={ctx} title={item.title}
