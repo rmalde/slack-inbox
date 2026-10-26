@@ -1,8 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Avatar from './Avatar';
 import { plain } from '../lib/mrkdwn';
 import { listTime } from '../lib/format';
-import { ArchiveIcon, HashIcon, LockIcon, MuteIcon, SearchIcon, ChevronIcon } from './Icons';
+import { ArchiveIcon, HashIcon, LockIcon, MuteIcon, SearchIcon, ChevronIcon, CloseIcon } from './Icons';
 
 function who(dir, id, botName, me) {
   if (id && id === me) return 'You';
@@ -74,27 +74,48 @@ function Row({ it, dir, selected, onSelect }) {
 }
 
 export default function InboxList({ sections, dir, selectedKey, onSelect, view, setView, query, setQuery, counts, onArchiveAll, collapsed, toggleCollapsed, status, searchRef }) {
+  // The filter lives in the toolbar: a magnifier that turns the tabs into an
+  // input. Stays open while it has text; Esc clears and closes.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const inputRef = useRef(null);
+  const searching = searchOpen || !!query;
+  useEffect(() => {
+    searchRef.current = { focus: () => { setSearchOpen(true); if (inputRef.current) inputRef.current.focus(); } };
+  }, [searchRef]);
+  useEffect(() => { if (searchOpen && inputRef.current) inputRef.current.focus(); }, [searchOpen]);
+  const closeSearch = () => { setQuery(''); setSearchOpen(false); };
+
   return (
     <aside className="list-pane">
       <header className="list-header">
         <div className="drag" />
-        <div className="list-title-row">
-          <h1>{view === 'inbox' ? 'Inbox' : 'Archived'}</h1>
+        {searching ? (
+          <label className="filter">
+            <SearchIcon size={14} />
+            <input ref={inputRef} placeholder={`Filter ${view === 'inbox' ? 'inbox' : 'archived'}`} value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onBlur={() => { if (!query) setSearchOpen(false); }}
+              onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); closeSearch(); e.currentTarget.blur(); } }} />
+            {query && <button type="button" className="filter-clear" onMouseDown={(e) => e.preventDefault()} onClick={closeSearch} aria-label="Clear filter"><CloseIcon size={12} /></button>}
+          </label>
+        ) : (
+          <nav className="tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={view === 'inbox'} className={`tab${view === 'inbox' ? ' on' : ''}`} onClick={() => setView('inbox')} title="Inbox (⌘1)">
+              Inbox{counts.unread ? <span className="tab-n">{counts.unread}</span> : null}
+            </button>
+            <button type="button" role="tab" aria-selected={view === 'archived'} className={`tab${view === 'archived' ? ' on' : ''}`} onClick={() => setView('archived')} title="Archived (⌘2)">
+              Archived
+            </button>
+          </nav>
+        )}
+        <div className="toolbar-end">
           <SyncDot status={status} />
+          {!searching && (
+            <button type="button" className="icon-btn" onClick={() => setSearchOpen(true)} title="Filter (/)" aria-label="Filter">
+              <SearchIcon size={15} />
+            </button>
+          )}
         </div>
-        <div className="seg" role="tablist">
-          <button type="button" role="tab" className={view === 'inbox' ? 'on' : ''} onClick={() => setView('inbox')}>
-            Inbox{counts.unread ? <span className="seg-n">{counts.unread}</span> : null}
-          </button>
-          <button type="button" role="tab" className={view === 'archived' ? 'on' : ''} onClick={() => setView('archived')}>Archived</button>
-          <span className="seg-thumb" style={{ transform: view === 'inbox' ? 'translateX(0)' : 'translateX(100%)' }} />
-        </div>
-        <label className="search">
-          <SearchIcon size={14} />
-          <input ref={searchRef} placeholder="Filter" value={query} onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Escape') { setQuery(''); e.currentTarget.blur(); } }} />
-          {!query && <kbd>/</kbd>}
-        </label>
       </header>
       <div className="list-scroll">
         {sections.map((s) => (
@@ -126,6 +147,7 @@ export default function InboxList({ sections, dir, selectedKey, onSelect, view, 
 
 function SyncDot({ status }) {
   if (!status) return null;
+  if (!status.error && status.phase !== 'seeding' && status.phase !== 'directory') return null;
   let cls = 'live';
   let label = 'Live';
   if (status.error) { cls = 'err'; label = status.error; }

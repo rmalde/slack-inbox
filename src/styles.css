@@ -115,32 +115,36 @@ kbd {
 .list-pane { grid-area: list; display: flex; flex-direction: column; min-height: 0; }
 .list-footer { grid-area: foot; position: relative; }
 
-.list-header { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 0 12px 8px; }
-.list-title-row { height: var(--bar-h); display: flex; align-items: center; justify-content: space-between; padding-left: 70px; padding-right: 4px; }
-.list-title-row h1 { font-size: 15px; font-weight: 700; margin: 0; letter-spacing: -0.005em; }
+/* Toolbar: one 48px row beside the traffic lights — tabs or the filter. */
+.list-header { position: relative; height: var(--bar-h); flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 76px; border-bottom: 1px solid var(--line); }
+.list-scroll { padding-top: 4px; }
+.toolbar-end { margin-left: auto; display: flex; align-items: center; gap: 4px; position: relative; -webkit-app-region: no-drag; }
 
-.sync { display: inline-flex; align-items: center; gap: 6px; color: var(--text-3); font-size: 11.5px; position: relative; }
-.sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #2bac76; }
-.sync.busy .sync-dot { background: var(--text-3); animation: pulse 1.4s ease-in-out infinite; }
+.tabs { position: relative; display: flex; align-items: center; gap: 2px; -webkit-app-region: no-drag; }
+.tab { height: 28px; padding: 0 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 600; color: var(--text-3); transition: background-color 120ms ease, color 120ms ease; }
+.tab.on { color: var(--text); background: var(--sel); }
+.tab-n { font-size: 12px; font-weight: 600; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.tab.on .tab-n { color: var(--text-2); }
+.tab:focus-visible, .icon-btn:focus-visible, .filter-clear:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.filter { position: relative; flex: 1; min-width: 0; height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 4px 0 9px; border-radius: 7px; color: var(--text-3); background: var(--raise); box-shadow: inset 0 0 0 1px var(--line-strong); -webkit-app-region: no-drag; }
+.filter:focus-within { box-shadow: inset 0 0 0 1px var(--focus), 0 0 0 3px var(--mention-bg); }
+.filter input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font: inherit; font-size: 13.5px; color: var(--text); }
+.filter input::placeholder { color: var(--text-3); }
+.filter-clear { width: 22px; height: 22px; border-radius: 5px; display: grid; place-items: center; color: var(--text-3); flex-shrink: 0; }
+
+.sync { display: inline-flex; align-items: center; gap: 6px; color: var(--text-3); font-size: 11.5px; padding-right: 4px; }
+.sync-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
+.sync.busy .sync-dot { animation: pulse 1.4s ease-in-out infinite; }
 .sync.err .sync-dot { background: var(--red); }
-.sync.err .sync-label { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--red); }
+.sync-label { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sync.err .sync-label { color: var(--red); }
 @keyframes pulse { 50% { opacity: 0.35; } }
-
-.seg { position: relative; display: grid; grid-template-columns: 1fr 1fr; padding: 2px; border-radius: 7px; background: var(--hover); box-shadow: inset 0 0 0 1px var(--line); }
-.seg button { position: relative; z-index: 1; height: 24px; border-radius: 5px; font-size: 12.5px; font-weight: 600; color: var(--text-2); display: flex; align-items: center; justify-content: center; gap: 6px; transition: color 150ms ease; }
-.seg button.on { color: var(--text); }
-.seg-thumb { position: absolute; top: 2px; left: 2px; width: calc(50% - 2px); height: 24px; border-radius: 5px; background: var(--raise); box-shadow: 0 1px 2px rgba(0,0,0,0.12), 0 0 0 1px var(--line); transition: transform 220ms var(--ease-out); }
-.seg-n { font-size: 10.5px; font-weight: 700; line-height: 1; padding: 2.5px 6px; border-radius: 99px; color: #fff; background: var(--red); font-variant-numeric: tabular-nums; }
-
-.search { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 6px 0 9px; border-radius: 7px; color: var(--text-3); background: var(--hover); box-shadow: inset 0 0 0 1px var(--line); transition: box-shadow 150ms ease, background-color 150ms ease; }
-.search:focus-within { background: var(--raise); box-shadow: inset 0 0 0 1px var(--focus), 0 0 0 3px var(--mention-bg); }
-.search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font: inherit; font-size: 13px; color: var(--text); }
-.search input::placeholder { color: var(--text-3); }
 
 .list-scroll { flex: 1; overflow-y: auto; padding: 0 2px 12px 6px; }
 
 .list-section + .list-section { margin-top: 4px; }
-.section-head { display: flex; align-items: center; justify-content: space-between; height: 30px; padding: 0 8px 0 10px; position: sticky; top: 0; z-index: 2; background: var(--list-bg); -webkit-backdrop-filter: blur(16px); }
+.section-head { display: flex; align-items: center; justify-content: space-between; height: 30px; padding: 0 8px 0 10px; position: sticky; top: 0; z-index: 2; background: color-mix(in srgb, var(--list-bg) 45%, transparent); -webkit-backdrop-filter: blur(14px) saturate(140%); }
 .section-toggle { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600; color: var(--text-2); }
 .section-toggle svg { transition: transform 200ms var(--ease-out); transform: rotate(90deg); opacity: 0.8; }
 .section-toggle.closed svg { transform: rotate(0deg); }
@@ -374,6 +378,8 @@ kbd {
   .row:not(.selected):hover { background: var(--hover); }
   .section-action:hover { background: var(--hover); color: var(--text-2); }
   .icon-btn:hover, .tool:hover, .title-link:hover { background: var(--hover); color: var(--text); }
+  .tab:not(.on):hover { background: var(--hover); color: var(--text-2); }
+  .filter-clear:hover { background: var(--hover); color: var(--text); }
   .msg:hover { background: var(--hover); }
   .msg.active:hover { background: color-mix(in srgb, #f2c744 12%, transparent); }
   .msg:hover .msg-tools { opacity: 1; pointer-events: auto; }
