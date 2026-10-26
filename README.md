@@ -29,6 +29,23 @@ login window in an isolated session; afterwards the app reads your mutes every
 3 minutes and can show image previews. You can also mute a conversation just
 inside Slack Inbox with **M** (stored locally).
 
+## Smart ordering (ported from Messages Inbox)
+
+- **Time sensitive** (top section): Haiku judges each fresh incoming message
+  (≤6h old) once — *how many hours does this stay urgent?* (0 = not). Urgent
+  rows show "45m left" / "until 7:00 PM" and drop out when they expire, when
+  you reply, or when a newer message supersedes them.
+- **Priority queue** (For you / Channels): `typesafe/jev-router` makes A/B
+  calls against a Slack rubric (blocked on Ronak → hiring → customers/investors
+  → work threads → FYIs → social → bots). A one-time merge sort orders the
+  backlog; after that each row with new activity binary-searches its slot.
+  Rows waiting for their slot sit at the top of their section. A sort with
+  >10% failed comparisons isn't saved.
+- Both run on OpenRouter with Trajectory's org key
+  (`~/Library/Application Support/{Slack,Messages} Inbox/openrouter-key`).
+  State lives in `inbox-store.json` under `ai`. Toggle in settings
+  ("Smart ordering"); off = plain recency.
+
 ## Keys
 
 `J`/`K` or arrows move · `⌘⇧E` archive (or unarchive in Archived) · `Z` undo ·

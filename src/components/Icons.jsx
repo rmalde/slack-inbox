@@ -22,3 +22,4 @@ export const SettingsIcon = I(<><circle cx="8" cy="8" r="2" /><path d="M8 1.8v1.
 export const FileIcon = I(<><path d="M9 2H4.5A1.5 1.5 0 0 0 3 3.5v9A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5V6Z" /><path d="M9 2v4h4" /></>);
 export const ChevronIcon = I(<path d="m6 4 4 4-4 4" />);
 export const CloseIcon = I(<path d="M4 4l8 8M12 4l-8 8" />);
+export const ClockIcon = I(<><circle cx="8" cy="8" r="5.8" /><path d="M8 4.8V8l2 1.4" /></>);

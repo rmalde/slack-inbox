@@ -182,6 +182,7 @@ kbd {
 .row-chips { display: flex; gap: 4px; margin-top: 4px; }
 .chip { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 4px; color: var(--text-2); box-shadow: inset 0 0 0 1px var(--line-strong); font-variant-numeric: tabular-nums; }
 .chip.at { color: #fff; background: var(--red); box-shadow: none; }
+.chip.urgent { display: inline-flex; align-items: center; gap: 4px; color: var(--me-ink); background: var(--me-bg); box-shadow: none; }
 .skeleton-line { height: 9px; width: 60%; margin: 5px 0 3px; border-radius: 4px; background: var(--hover); }
 
 /* footer */

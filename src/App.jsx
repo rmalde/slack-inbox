@@ -67,12 +67,25 @@ export default function App() {
       const arch = items.filter((i) => i.archived && matches(i)).sort((a, b) => tsNum(b.lastTs) - tsNum(a.lastTs)).slice(0, 400);
       return [{ id: 'archived', label: 'Archived', items: arch, empty: 'Nothing archived yet' }];
     }
-    const live = items.filter((i) => !i.archived && matches(i)).sort((a, b) => sortKey(b) - sortKey(a));
+    const live = items.filter((i) => !i.archived && matches(i));
+    // Smart order: rows still waiting for their ranked slot sit on top (newest
+    // first), then the jev-ranked queue. Off → plain recency.
+    const smart = !!(status && status.smartOrder);
+    const order = (a, b) => {
+      if (smart) {
+        if ((a.rank == null) !== (b.rank == null)) return a.rank == null ? -1 : 1;
+        if (a.rank != null) return a.rank - b.rank;
+      }
+      return sortKey(b) - sortKey(a);
+    };
+    const urgent = live.filter((i) => i.urgentUntil).sort((a, b) => a.urgentUntil - b.urgentUntil);
+    const rest = live.filter((i) => !i.urgentUntil).sort(order);
     return [
-      { id: 'you', label: 'For you', items: live.filter((i) => i.section === 'you'), empty: 'No DMs, mentions, or replies waiting' },
-      { id: 'channels', label: 'Channels', items: live.filter((i) => i.section === 'channels'), empty: 'Channels are quiet' },
+      ...(urgent.length ? [{ id: 'urgent', label: 'Time sensitive', items: urgent, empty: '' }] : []),
+      { id: 'you', label: 'For you', items: rest.filter((i) => i.section === 'you'), empty: 'No DMs, mentions, or replies waiting' },
+      { id: 'channels', label: 'Channels', items: rest.filter((i) => i.section === 'channels'), empty: 'Channels are quiet' },
     ];
-  }, [items, view, matches]);
+  }, [items, view, matches, status && status.smartOrder]);
 
   const flat = useMemo(() => sections.flatMap((s) => (collapsed[s.id] ? [] : s.items)), [sections, collapsed]);
   const counts = useMemo(() => {
@@ -244,6 +257,7 @@ export default function App() {
         {settingsOpen && settings && (
           <div className="popover" role="dialog">
             <Toggle label="Desktop notifications" sub="DMs, mentions, and threads you're in" on={settings.notifications} onChange={(v) => setSetting({ notifications: v })} />
+            <Toggle label="Smart ordering" sub="Time-sensitive section + priority-ranked inbox" on={settings.smartOrder !== false} onChange={(v) => setSetting({ smartOrder: v })} />
             <Toggle label="Mark read in Slack on archive" sub="Clears Slack's unread badge too" on={settings.markReadInSlack} onChange={(v) => setSetting({ markReadInSlack: v })} />
             <div className="pop-sep" />
             {status && status.webConnected

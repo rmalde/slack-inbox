@@ -2,7 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import Avatar from './Avatar';
 import { plain } from '../lib/mrkdwn';
 import { listTime } from '../lib/format';
-import { ArchiveIcon, HashIcon, LockIcon, MuteIcon, SearchIcon, ChevronIcon, CloseIcon } from './Icons';
+import { ArchiveIcon, HashIcon, LockIcon, MuteIcon, SearchIcon, ChevronIcon, CloseIcon, ClockIcon } from './Icons';
+
+// "45m left" / "until 7:00 PM" for a time-sensitive row.
+function untilLabel(at) {
+  const mins = Math.round((at - Date.now()) / 60000);
+  if (mins < 60) return `${Math.max(1, mins)}m left`;
+  return `until ${new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+}
 
 function who(dir, id, botName, me) {
   if (id && id === me) return 'You';
@@ -62,10 +69,11 @@ function Row({ it, dir, selected, onSelect }) {
             {latest || 'Attachment'}
           </div>
         )}
-        {(it.mention || it.newCount > 1) && it.unread && (
+        {(it.urgentUntil || ((it.mention || it.newCount > 1) && it.unread)) && (
           <div className="row-chips">
-            {it.mention && <span className="chip at">@ mention</span>}
-            {it.newCount > 1 && <span className="chip">{it.newCount} new</span>}
+            {it.urgentUntil && <span className="chip urgent" title="Time sensitive"><ClockIcon size={11} />{untilLabel(it.urgentUntil)}</span>}
+            {it.mention && it.unread && <span className="chip at">@ mention</span>}
+            {it.newCount > 1 && it.unread && <span className="chip">{it.newCount} new</span>}
           </div>
         )}
       </div>
@@ -147,14 +155,14 @@ export default function InboxList({ sections, dir, selectedKey, onSelect, view, 
 
 function SyncDot({ status }) {
   if (!status) return null;
-  if (!status.error && status.phase !== 'seeding' && status.phase !== 'directory') return null;
+  if (!status.error && status.phase !== 'seeding' && status.phase !== 'directory' && !status.ranking) return null;
   let cls = 'live';
   let label = 'Live';
   if (status.error) { cls = 'err'; label = status.error; }
   else if (status.phase === 'seeding' || status.phase === 'directory') {
     cls = 'busy';
     label = status.seedProgress ? `Catching up · ${status.seedProgress.page}/${status.seedProgress.pages || '…'}` : 'Catching up';
-  }
+  } else if (status.ranking) { cls = 'busy'; label = 'Prioritizing'; }
   return (
     <span className={`sync ${cls}`} title={label}>
       <span className="sync-dot" />

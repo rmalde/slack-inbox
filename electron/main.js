@@ -9,6 +9,7 @@ const { Store, ts } = require('./lib/store');
 const { Directory } = require('./lib/directory');
 const { Sync } = require('./lib/sync');
 const { WebSession } = require('./lib/websession');
+const { Brain } = require('./lib/brain');
 
 app.setName('Slack Inbox');
 
@@ -26,6 +27,7 @@ let store;
 let dir;
 let sync;
 let web;
+let brain;
 let customEmoji = {};
 const log = (...a) => console.log('[slack-inbox]', ...a);
 
@@ -146,6 +148,7 @@ function viewItem(it) {
     threadTs: it.threadTs,
     openedTs: it.openedTs,
     firstUnreadTs: it.firstUnreadTs || null,
+    ...(brain ? brain.decorate(it) : { urgentUntil: null, rank: null }),
   };
 }
 
@@ -211,6 +214,7 @@ app.whenReady().then(async () => {
   web = new WebSession(ud, store.meta.teamId);
   sync = new Sync({ store, dir, onChange: changed, onNotify: notify, log });
   store.onExternalChange = changed;
+  brain = new Brain({ store, dir, sync, view: (it) => viewItem(it), visible: (it) => visible(it), onChange: changed, log });
 
   protocol.handle('slackfile', async (req) => {
     // slackfile://f/<encoded https url>
@@ -242,6 +246,7 @@ app.whenReady().then(async () => {
     changed();
   }
   refreshMutes().finally(() => schedulePoll(0));
+  brain.start();
   setInterval(refreshMutes, MUTES_EVERY_MS);
   setInterval(() => dir.refresh().then(() => send('directory-changed')).catch(() => {}), 6 * 3600e3);
   store.prune();
@@ -258,7 +263,7 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 // before the mute list was known. Unmuting brings them back.
 const visible = (it) => it.mention || !store.isMuted(it.channel);
 
-ipcMain.handle('inbox:list', () => ({
+ipcMain.handle('inbox:list', () => (brain && brain.beginDecorate(), {
   items: Object.values(store.items).filter(visible).map(viewItem),
   status: {
     ...sync.status,
@@ -266,6 +271,9 @@ ipcMain.handle('inbox:list', () => ({
     webConnected: web.connected,
     mutesFetchedAt: store.data.mutes.slackFetchedAt,
     me: store.meta.me,
+    ranking: !!(brain && brain.status.ranking),
+    smartOrder: !!(brain && brain.enabled()),
+    aiError: brain && brain.status.lastError,
   },
 }));
 

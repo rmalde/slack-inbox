@@ -13,6 +13,7 @@
 //   mutes     { slack: [channelId], slackFetchedAt, local: { channelId: true } }
 //   myThreads { "C:threadTs": lastTsIPosted }      — threads I participate in
 //   items     { key: Item }
+//   ai        { urgent, priority } — time-sensitive verdicts + ranked queue (lib/brain.js)
 //
 // Item (one inbox row = one thread, or a DM's top-level stream):
 //   key "C:threadTs" | "D:dm", channel, threadTs|null, kind 'thread'|'dm'
@@ -30,10 +31,11 @@ try { fsx = require('fs-native-extensions'); } catch { /* unlocked fallback */ }
 
 const DEFAULTS = () => ({
   meta: {},
-  settings: { markReadInSlack: true, notifications: true },
+  settings: { markReadInSlack: true, notifications: true, smartOrder: true },
   mutes: { slack: [], slackFetchedAt: 0, local: {} },
   myThreads: {},
   items: {},
+  ai: { urgent: {}, priority: { order: [], byKey: {}, backfilled: false } },
 });
 
 const ts = (s) => (s ? parseFloat(s) : 0);
