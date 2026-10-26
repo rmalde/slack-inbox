@@ -116,7 +116,7 @@ kbd {
 .list-footer { grid-area: foot; position: relative; }
 
 /* Toolbar: one 48px row beside the traffic lights — tabs or the filter. */
-.list-header { position: relative; height: var(--bar-h); flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 76px; border-bottom: 1px solid var(--line); }
+.list-header { position: relative; height: var(--bar-h); flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 90px; border-bottom: 1px solid var(--line); }
 .list-scroll { padding-top: 4px; }
 .toolbar-end { margin-left: auto; display: flex; align-items: center; gap: 4px; position: relative; -webkit-app-region: no-drag; }
 
@@ -225,11 +225,11 @@ kbd {
 .reader-title { flex: 1; min-width: 0; position: relative; display: flex; align-items: center; gap: 6px; color: var(--text); pointer-events: none; }
 .reader-title svg { flex-shrink: 0; color: var(--text-2); }
 .reader-title h2 { margin: 0; font-size: 15px; font-weight: 700; white-space: nowrap; flex-shrink: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
-.reader-sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: 13px; margin-left: 4px; }
+.reader-sub { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: 13px; margin-left: 4px; }
 .reader-sub-sep { color: var(--text-2); font-weight: 600; margin-right: 6px; }
 .reader-sub-sep::before { content: "›"; margin-right: 8px; color: var(--text-3); font-weight: 400; }
-.title-link { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 45%; padding: 3px 6px; margin-left: -6px; border-radius: 6px; pointer-events: auto; -webkit-app-region: no-drag; color: var(--text); transition: background-color 150ms ease; }
-.title-link h2 { max-width: none; overflow: hidden; text-overflow: ellipsis; }
+.title-link { display: inline-flex; flex: 0 1 auto; align-items: center; gap: 6px; min-width: 0; max-width: 50%; overflow: hidden; padding: 3px 6px; margin-left: -6px; border-radius: 6px; pointer-events: auto; -webkit-app-region: no-drag; color: var(--text); transition: background-color 150ms ease; }
+.title-link h2 { max-width: none; min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
 .tool.back { pointer-events: auto; -webkit-app-region: no-drag; margin-left: -8px; margin-right: 2px; font-size: 13px; font-weight: 600; color: var(--text-2); }
 .tool.back svg { transform: rotate(180deg); }
 .ext-tag { font-size: 10.5px; padding: 1px 5px; border-radius: 4px; color: var(--text-2); box-shadow: inset 0 0 0 1px var(--line-strong); font-weight: 600; }
