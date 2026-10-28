@@ -150,6 +150,12 @@ class Sync {
             Object.assign(it, { lastTs: n.ts, lastFromMe: true, lastUser: n.user, lastText: n.text });
             changed = true;
           }
+          // Replying (here or in the real Slack app) means I've read everything
+          // up to my reply: clear the unread state, but leave archiving to me.
+          if (it && ts(n.ts) >= ts(it.lastIncomingTs) && ts(n.ts) > ts(it.openedTs)) {
+            Object.assign(it, { openedTs: n.ts, newCount: 0 });
+            changed = true;
+          }
           continue;
         }
 
