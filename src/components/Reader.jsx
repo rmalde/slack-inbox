@@ -300,7 +300,7 @@ function ThreadPanel({ channel, threadTs, dir, ctx, onClose, title }) {
   );
 }
 
-export default function Reader({ item, dir, webConnected, onArchive, onUnread, onToggleMute, onFixWithAgent, agentRef, composerRef, onAfterSend }) {
+export default function Reader({ item, dir, webConnected, onArchive, onUnread, onToggleMute, onFixWithAgent, agentRef, onCopyLink, copyLinkRef, composerRef, onAfterSend }) {
   const [messages, setMessages] = useState(null);
   const [error, setError] = useState(null);
   const [panel, setPanel] = useState(null); // { threadTs } of an open side thread
@@ -358,6 +358,7 @@ export default function Reader({ item, dir, webConnected, onArchive, onUnread, o
   // otherwise this row, to Claude Code.
   const fixWithAgent = () => onFixWithAgent(panel ? panel.threadTs : null);
   if (agentRef) agentRef.current = fixWithAgent;
+  if (copyLinkRef) copyLinkRef.current = () => onCopyLink(panel ? panel.threadTs : null);
 
   useEffect(() => {
     if (!panel && !conv) return undefined;

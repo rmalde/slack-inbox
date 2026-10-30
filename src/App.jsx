@@ -25,6 +25,7 @@ export default function App() {
   const [settings, setSettings] = useState(null);
   const composerRef = useRef(null);
   const agentRef = useRef(null);
+  const copyLinkRef = useRef(null);
   const searchRef = useRef(null);
   const undoRef = useRef(null);
   const toastT = useRef(null);
@@ -169,6 +170,12 @@ export default function App() {
     showToast(r.ok ? 'Opened a new Claude Code session' : `Couldn’t open Claude Code · ${r.error}`);
   };
 
+  const copyLink = async (threadTs) => {
+    if (!selected) return;
+    const r = await window.api.copyLink({ key: selected.key, threadTs });
+    showToast(r.ok ? 'Link copied' : 'Couldn’t copy link');
+  };
+
   const toggleMute = async () => {
     if (!selected) return;
     const on = await window.api.toggleMute(selected.channel);
@@ -189,6 +196,7 @@ export default function App() {
       else if (c === 'unread') h.markUnread();
       else if (c === 'open-slack' && h.selected) window.api.openInSlack({ key: h.selected.key });
       else if (c === 'agent' && agentRef.current) agentRef.current();
+      else if (c === 'copy-link' && copyLinkRef.current) copyLinkRef.current();
       else if (c === 'mute') h.toggleMute();
       else if (c === 'next') h.move(1);
       else if (c === 'prev') h.move(-1);
@@ -276,7 +284,7 @@ export default function App() {
             <div className="pop-keys">
               <span><kbd>J</kbd><kbd>K</kbd> move</span><span><kbd>⌘⇧E</kbd> archive</span><span><kbd>Z</kbd> undo</span>
               <span><kbd>R</kbd> reply</span><span><kbd>U</kbd> unread</span><span><kbd>⌘⇧A</kbd> open in Slack</span>
-              <span><kbd>M</kbd> mute here</span><span><kbd>⌘⇧C</kbd> fix with agent</span><span><kbd>/</kbd> filter</span>
+              <span><kbd>M</kbd> mute here</span><span><kbd>⌘⇧C</kbd> fix with agent</span><span><kbd>⌘⇧L</kbd> copy link</span><span><kbd>/</kbd> filter</span>
             </div>
           </div>
         )}
@@ -293,6 +301,8 @@ export default function App() {
           composerRef={composerRef}
           agentRef={agentRef}
           onFixWithAgent={fixWithAgent}
+          copyLinkRef={copyLinkRef}
+          onCopyLink={copyLink}
         />
       ) : (
         <main className="reader empty">

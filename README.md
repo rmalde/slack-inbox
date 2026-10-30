@@ -50,7 +50,7 @@ inside Slack Inbox with **M** (stored locally).
 
 `J`/`K` or arrows move · `⌘⇧E` archive (or unarchive in Archived) · `Z` undo ·
 `R`/`Enter` reply · `U` mark unread · `⌘⇧A` (or `O`) open the thread in the Slack app · `M` mute here ·
-`⌘⇧C` fix with agent (opens a prefilled Claude Code session in `~/tech` with the thread, its link, and a reply command; nothing runs until you send) · `/` filter · `⌘1`/`⌘2` Inbox/Archived · `⌘R` refresh. In the composer `↵`
+`⌘⇧L` copy link to the thread · `⌘⇧C` fix with agent (opens a prefilled Claude Code session in `~/tech` with the thread, its link, and a reply command; nothing runs until you send) · `/` filter · `⌘1`/`⌘2` Inbox/Archived · `⌘R` refresh. In the composer `↵`
 sends, `⇧↵` newline, `Esc` returns to the list.
 
 ## How it stays current

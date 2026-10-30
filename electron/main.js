@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, Menu, nativeTheme, shell, Notification, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, nativeTheme, shell, Notification, protocol, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -85,6 +85,7 @@ function buildMenu() {
         { label: 'Mark Unread', accelerator: 'CmdOrCtrl+Shift+U', click: to('cmd', 'unread') },
         { label: 'Open Thread in Slack', accelerator: 'CmdOrCtrl+Shift+A', click: to('cmd', 'open-slack') },
         { label: 'Fix with Agent', accelerator: 'CmdOrCtrl+Shift+C', click: to('cmd', 'agent') },
+        { label: 'Copy Link to Thread', accelerator: 'CmdOrCtrl+Shift+L', click: to('cmd', 'copy-link') },
         { label: 'Mute Channel Here', accelerator: 'CmdOrCtrl+Shift+M', click: to('cmd', 'mute') },
         { type: 'separator' },
         { label: 'Next', accelerator: 'CmdOrCtrl+Down', click: to('cmd', 'next') },
@@ -370,6 +371,20 @@ ipcMain.handle('item:openInSlack', (_e, { key, ts: msgTs }) => {
   const hasDesktop = fs.existsSync('/Applications/Slack.app') || fs.existsSync(path.join(require('os').homedir(), 'Applications', 'Slack.app'));
   shell.openExternal(hasDesktop ? sync.deepLink(it, msgTs) : sync.permalink(it, msgTs));
   return true;
+});
+
+// Copy Slack's canonical link to the thread (or the side-panel thread, or
+// a DM's latest message) — the same link Slack's own "Copy link" gives.
+ipcMain.handle('item:copyLink', async (_e, { key, threadTs }) => {
+  const it = store.items[key];
+  if (!it) return { ok: false };
+  const target = threadTs ? { kind: 'thread', channel: it.channel, threadTs } : it;
+  const ts = target.kind === 'thread' ? target.threadTs : target.lastTs;
+  let url;
+  try { url = (await slack.call('chat.getPermalink', { channel: it.channel, message_ts: ts })).permalink; }
+  catch { url = sync.permalink(target, ts); }
+  clipboard.writeText(url);
+  return { ok: true, url };
 });
 
 // Hand the thread (or the side-panel thread inside a DM) to Claude Code.
