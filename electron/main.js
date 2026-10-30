@@ -10,6 +10,7 @@ const { Directory } = require('./lib/directory');
 const { Sync } = require('./lib/sync');
 const { WebSession } = require('./lib/websession');
 const { Brain } = require('./lib/brain');
+const agent = require('./lib/agent');
 
 app.setName('Slack Inbox');
 
@@ -83,6 +84,7 @@ function buildMenu() {
         { label: 'Archive', accelerator: 'CmdOrCtrl+Shift+E', click: to('cmd', 'archive') },
         { label: 'Mark Unread', accelerator: 'CmdOrCtrl+Shift+U', click: to('cmd', 'unread') },
         { label: 'Open Thread in Slack', accelerator: 'CmdOrCtrl+Shift+A', click: to('cmd', 'open-slack') },
+        { label: 'Fix with Agent', accelerator: 'CmdOrCtrl+Shift+C', click: to('cmd', 'agent') },
         { label: 'Mute Channel Here', accelerator: 'CmdOrCtrl+Shift+M', click: to('cmd', 'mute') },
         { type: 'separator' },
         { label: 'Next', accelerator: 'CmdOrCtrl+Down', click: to('cmd', 'next') },
@@ -368,6 +370,32 @@ ipcMain.handle('item:openInSlack', (_e, { key, ts: msgTs }) => {
   const hasDesktop = fs.existsSync('/Applications/Slack.app') || fs.existsSync(path.join(require('os').homedir(), 'Applications', 'Slack.app'));
   shell.openExternal(hasDesktop ? sync.deepLink(it, msgTs) : sync.permalink(it, msgTs));
   return true;
+});
+
+// Hand the thread (or the side-panel thread inside a DM) to Claude Code.
+ipcMain.handle('agent:fix', async (_e, { key, threadTs }) => {
+  const it = store.items[key];
+  if (!it) return { ok: false, error: 'gone' };
+  try {
+    const target = threadTs ? { kind: 'thread', channel: it.channel, threadTs } : it;
+    const raw = await sync.messagesFor(target, { limit: 40 });
+    const me = store.meta.me;
+    const messages = raw.slice(-40).map((m) => ({
+      who: m.user === me ? 'Ronak (me)' : (m.user ? dir.userName(m.user) : m.botName || 'bot'),
+      when: new Date(parseFloat(m.ts) * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
+      text: [m.text, ...m.attachments.map((a) => [a.title, a.text].filter(Boolean).join(' — ')), ...m.files.map((f) => `[file: ${f.name}]`)]
+        .filter(Boolean).join('\n').replace(/<@(\w+)(?:\|([^>]+))?>/g, (_x, id, l) => `@${l || dir.userName(id)}`),
+    }));
+    const v = viewItem(it);
+    const where = v.convKind === 'im' ? `DM with ${v.title}` : v.convKind === 'mpim' ? `group DM (${v.title})` : `${target.kind === 'thread' ? 'thread in ' : ''}${v.title}`;
+    const folder = store.settings.agentFolder || agent.defaultFolder();
+    const prompt = agent.promptFor({
+      where, permalink: sync.permalink(target, target.threadTs), channel: it.channel,
+      threadTs: target.kind === 'thread' ? target.threadTs : null, messages, folder,
+    });
+    await shell.openExternal(agent.deepLink(prompt, folder));
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
 });
 
 ipcMain.handle('mute:toggleLocal', (_e, channel) => {

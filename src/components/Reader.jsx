@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import Avatar from './Avatar';
 import { Mrkdwn, Emoji, plain } from '../lib/mrkdwn';
 import { msgTime, dayLabel, dayKey, fullTime } from '../lib/format';
-import { ArchiveIcon, UnreadIcon, ExternalIcon, MuteIcon, BellIcon, SendIcon, ThreadIcon, FileIcon, HashIcon, LockIcon, CloseIcon, ChevronIcon } from './Icons';
+import { ArchiveIcon, UnreadIcon, ExternalIcon, MuteIcon, BellIcon, SendIcon, ThreadIcon, FileIcon, HashIcon, LockIcon, CloseIcon, ChevronIcon, SparkleIcon } from './Icons';
 
 const QUICK = ['+1', 'white_check_mark', 'eyes', 'heart', 'joy', 'pray'];
 
@@ -300,7 +300,7 @@ function ThreadPanel({ channel, threadTs, dir, ctx, onClose, title }) {
   );
 }
 
-export default function Reader({ item, dir, webConnected, onArchive, onUnread, onToggleMute, composerRef, onAfterSend }) {
+export default function Reader({ item, dir, webConnected, onArchive, onUnread, onToggleMute, onFixWithAgent, agentRef, composerRef, onAfterSend }) {
   const [messages, setMessages] = useState(null);
   const [error, setError] = useState(null);
   const [panel, setPanel] = useState(null); // { threadTs } of an open side thread
@@ -354,6 +354,10 @@ export default function Reader({ item, dir, webConnected, onArchive, onUnread, o
     setPanel({ threadTs: item.threadTs });
   };
   const backToThread = () => { setConv(false); setPanel(null); };
+  // ⌘⇧C / the button: hand the open side-panel thread if there is one,
+  // otherwise this row, to Claude Code.
+  const fixWithAgent = () => onFixWithAgent(panel ? panel.threadTs : null);
+  if (agentRef) agentRef.current = fixWithAgent;
 
   useEffect(() => {
     if (!panel && !conv) return undefined;
@@ -415,6 +419,7 @@ export default function Reader({ item, dir, webConnected, onArchive, onUnread, o
             <button type="button" className="tool" onClick={onToggleMute} title={item.muted ? 'Unmute here (⌘⇧M)' : 'Mute this conversation here (⌘⇧M)'}>
               {item.muted ? <BellIcon /> : <MuteIcon />}
             </button>
+            <button type="button" className="tool agent" onClick={fixWithAgent} title="Fix with agent: open in Claude Code (⌘⇧C)"><SparkleIcon /> <span>Fix with agent</span></button>
             <button type="button" className="tool" onClick={() => ctx.openInSlack()} title="Open thread in Slack (⌘⇧A)"><ExternalIcon /></button>
             <button type="button" className="tool" onClick={onUnread} title="Mark unread (u)"><UnreadIcon /></button>
             <button type="button" className="tool primary" onClick={onArchive} title={item.archived ? 'Move to Inbox (⌘⇧E)' : 'Archive (⌘⇧E)'}>

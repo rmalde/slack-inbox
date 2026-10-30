@@ -23,3 +23,4 @@ export const FileIcon = I(<><path d="M9 2H4.5A1.5 1.5 0 0 0 3 3.5v9A1.5 1.5 0 0 
 export const ChevronIcon = I(<path d="m6 4 4 4-4 4" />);
 export const CloseIcon = I(<path d="M4 4l8 8M12 4l-8 8" />);
 export const ClockIcon = I(<><circle cx="8" cy="8" r="5.8" /><path d="M8 4.8V8l2 1.4" /></>);
+export const SparkleIcon = I(<><path d="M8 2.5 9.3 6.7 13.5 8 9.3 9.3 8 13.5 6.7 9.3 2.5 8 6.7 6.7Z" /><path d="M12.5 2v2.5M11.25 3.25h2.5" /></>);

@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('api', {
   send: inv('item:send'),
   react: inv('item:react'),
   openInSlack: inv('item:openInSlack'),
+  fixWithAgent: inv('agent:fix'),
   toggleMute: inv('mute:toggleLocal'),
   signIn: inv('session:signIn'),
   signOut: inv('session:signOut'),
