@@ -27,7 +27,7 @@ function Row({ it, dir, selected, onSelect }) {
   const threadInDm = !isChannel && it.kind === 'thread';
   const subject = it.kind === 'thread' && it.rootText != null ? plain(it.rootText, dir) : null;
   const latest = plain(it.lastText, dir);
-  const showLatest = it.kind === 'dm' || (it.lastTs !== it.threadTs);
+  const showLatest = it.kind !== 'thread' || (it.lastTs !== it.threadTs);
   const latestWho = who(dir, it.lastUser, it.lastBotName, dir.me);
 
   return (

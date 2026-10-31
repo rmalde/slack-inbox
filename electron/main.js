@@ -413,13 +413,34 @@ ipcMain.handle('agent:fix', async (_e, { key, threadTs }) => {
   } catch (e) { return { ok: false, error: e.message }; }
 });
 
-ipcMain.handle('mute:toggleLocal', (_e, channel) => {
+// Mute here AND in Slack ("mute and hide"): flip Slack's per-conversation mute
+// through the web session, and close DMs so they drop out of Slack's sidebar
+// (Ronak's Slack already hides muted channels). Without a web session it's a
+// local-only mute.
+ipcMain.handle('mute:toggleLocal', async (_e, channel) => {
+  const mute = !store.isMuted(channel);
   store.mutate((d) => {
-    if (d.mutes.local[channel]) delete d.mutes.local[channel];
-    else d.mutes.local[channel] = true;
+    if (mute) d.mutes.local[channel] = true;
+    else { delete d.mutes.local[channel]; d.mutes.slack = d.mutes.slack.filter((c) => c !== channel); }
   });
   changed();
-  return !!store.data.mutes.local[channel];
+  if (web.connected) {
+    try {
+      await web.setMuted(channel, mute);
+      store.mutate((d) => {
+        delete d.mutes.local[channel];
+        if (mute && !d.mutes.slack.includes(channel)) d.mutes.slack.push(channel);
+      });
+      const ck = dir.convKind(channel);
+      if (mute && (ck === 'im' || ck === 'mpim')) {
+        await slack.call('conversations.close', { channel }, { post: true })
+          .catch(() => web.call('conversations.close', { channel }))
+          .catch((e) => log('close', e.message));
+      }
+    } catch (e) { log('slack mute', e.message); }
+    changed();
+  }
+  return store.isMuted(channel);
 });
 
 ipcMain.handle('session:signIn', async () => {

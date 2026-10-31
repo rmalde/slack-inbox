@@ -1,7 +1,7 @@
 # Slack Inbox
 
 Slack, reshaped as an email-style inbox. No channels sidebar: every unread
-**thread** is one row (a DM's main conversation is one row too). Read it,
+**thread** is one row (a DM's main conversation is one row, and so are all of a channel's new posts). Read it,
 reply, press **⌘⇧E**, it's gone. A new message in that thread brings it back.
 
 Local-only Electron app. Reads Slack with Ronak's user token
@@ -13,8 +13,8 @@ replies post as plain "Ronak" with no "Sent using" footer.
 | Where | What becomes an inbox row |
 |---|---|
 | DMs / group DMs | every incoming message (bot-DM thread replies only if you're in the thread) |
-| Channels | every new top-level post |
-| Channel threads | threads you started or replied in, threads already in your inbox, anything that @mentions you |
+| Channels | every new top-level post, collected into one row per channel |
+| Channel threads | their own row: threads you started or replied in, threads on posts in the channel's pending update, anything that @mentions you |
 | **Muted** channels | only messages that @mention you |
 
 Rows are split into **For you** (DMs, mentions, your threads) and
@@ -26,8 +26,9 @@ row.
 Slack only exposes mute settings to its own web client, so the app has a
 one-time **Sign in to Slack** (bottom of the list). That opens a real Slack
 login window in an isolated session; afterwards the app reads your mutes every
-3 minutes and can show image previews. You can also mute a conversation just
-inside Slack Inbox with **M** (stored locally).
+3 minutes and can show image previews. **M** / **⌘⇧M** mutes & hides a
+conversation in Slack itself too (Slack's per-conversation mute; DMs are also
+closed out of the sidebar). Signed out, it's a local-only mute.
 
 ## Smart ordering (ported from Messages Inbox)
 
@@ -49,7 +50,7 @@ inside Slack Inbox with **M** (stored locally).
 ## Keys
 
 `J`/`K` or arrows move · `⌘⇧E` archive (or unarchive in Archived) · `Z` undo ·
-`R`/`Enter` reply · `U` mark unread · `⌘⇧A` (or `O`) open the thread in the Slack app · `M` mute here ·
+`R`/`Enter` reply · `U` mark unread · `⌘⇧A` (or `O`) open the thread in the Slack app · `M` mute & hide (in Slack too) ·
 `⌘⇧L` copy link to the thread · `⌘⇧C` fix with agent (opens a prefilled Claude Code session in `~/tech` with the thread, its link, and a reply command; nothing runs until you send) · `/` filter · `⌘1`/`⌘2` Inbox/Archived · `⌘R` refresh. In the composer `↵`
 sends, `⇧↵` newline, `Esc` returns to the list.
 

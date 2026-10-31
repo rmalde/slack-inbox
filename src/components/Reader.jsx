@@ -417,7 +417,7 @@ export default function Reader({ item, dir, webConnected, onArchive, onUnread, o
             )}
           </div>
           <div className="reader-actions">
-            <button type="button" className="tool" onClick={onToggleMute} title={item.muted ? 'Unmute here (⌘⇧M)' : 'Mute this conversation here (⌘⇧M)'}>
+            <button type="button" className="tool" onClick={onToggleMute} title={item.muted ? 'Unmute (⌘⇧M)' : 'Mute & hide, here and in Slack (⌘⇧M)'}>
               {item.muted ? <BellIcon /> : <MuteIcon />}
             </button>
             <button type="button" className="tool agent" onClick={fixWithAgent} title="Fix with agent: open in Claude Code (⌘⇧C)"><SparkleIcon /> <span>Fix with agent</span></button>

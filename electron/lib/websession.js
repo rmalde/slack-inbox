@@ -185,6 +185,11 @@ class WebSession {
     return [...muted];
   }
 
+  // Same switch as Slack's "Mute conversation" (per-channel notification pref).
+  setMuted(channel, muted) {
+    return this.call('users.prefs.setNotifications', { name: 'muted', value: muted ? 'true' : 'false', global: 'false', channel_id: channel });
+  }
+
   async customEmoji() {
     const r = await this.call('emoji.list');
     return r.emoji || {};

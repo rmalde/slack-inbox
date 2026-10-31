@@ -179,7 +179,7 @@ export default function App() {
   const toggleMute = async () => {
     if (!selected) return;
     const on = await window.api.toggleMute(selected.channel);
-    showToast(on ? `Muted ${selected.title} in Slack Inbox` : `Unmuted ${selected.title}`);
+    showToast(on ? `Muted & hid ${selected.title}${status && status.webConnected ? " in Slack too" : " here"}` : `Unmuted ${selected.title}`);
   };
 
   const toggleCollapsed = (id) => setCollapsed((c) => { const n = { ...c, [id]: !c[id] }; savePref('collapsed', n); return n; });
@@ -284,7 +284,7 @@ export default function App() {
             <div className="pop-keys">
               <span><kbd>J</kbd><kbd>K</kbd> move</span><span><kbd>⌘⇧E</kbd> archive</span><span><kbd>Z</kbd> undo</span>
               <span><kbd>R</kbd> reply</span><span><kbd>U</kbd> unread</span><span><kbd>⌘⇧A</kbd> open in Slack</span>
-              <span><kbd>M</kbd> mute here</span><span><kbd>⌘⇧C</kbd> fix with agent</span><span><kbd>⌘⇧L</kbd> copy link</span><span><kbd>/</kbd> filter</span>
+              <span><kbd>M</kbd> mute &amp; hide</span><span><kbd>⌘⇧C</kbd> fix with agent</span><span><kbd>⌘⇧L</kbd> copy link</span><span><kbd>/</kbd> filter</span>
             </div>
           </div>
         )}

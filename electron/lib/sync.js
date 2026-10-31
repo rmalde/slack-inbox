@@ -10,9 +10,13 @@
 //
 // Which messages make an item (mirrors what Slack would actually notify):
 //   DMs / group DMs ......... everything (group DMs respect mute)
-//   channel top-level ....... everything, unless the channel is muted
-//   channel thread reply .... threads I started / replied in, threads already
-//                             sitting in my inbox, or anything mentioning me
+//   channel top-level ....... everything, unless the channel is muted — all of
+//                             a channel's new posts collect in ONE row per
+//                             channel ("C:ch"), like a DM
+//   channel thread reply .... its own row: threads I started / replied in,
+//                             threads already sitting in my inbox, threads on
+//                             posts in the channel's pending update, or
+//                             anything mentioning me
 //   muted channel ........... only messages that @mention me
 // My own messages never create or unarchive an item (email semantics), but
 // they mark the thread as one I participate in.
@@ -89,6 +93,46 @@ class Sync {
     } else {
       this.dir.refresh().catch((e) => this.log('directory refresh', e.message));
     }
+    this.migrateChannelRows();
+  }
+
+  // One-time: channel posts used to be a row each ("C:ts"). Fold the ones
+  // that never got replies into their channel's single "C:ch" row.
+  migrateChannelRows() {
+    if (this.store.meta.channelRows) return;
+    this.store.mutate((d) => {
+      const groups = {};
+      for (const it of Object.values(d.items)) {
+        if (it.kind !== 'thread' || this.dir.convKind(it.channel) !== 'channel') continue;
+        if (it.createdTs !== it.threadTs || ts(it.lastIncomingTs) > ts(it.threadTs)) continue;
+        (groups[it.channel] = groups[it.channel] || []).push(it);
+      }
+      for (const [channel, rows] of Object.entries(groups)) {
+        const key = `${channel}:ch`;
+        const all = d.items[key] ? [d.items[key], ...rows] : rows;
+        const newest = all.reduce((x, y) => (ts(y.lastTs) > ts(x.lastTs) ? y : x));
+        const pending = all.filter((i) => !Store.isArchived(i) && Store.isUnread(i));
+        const firstUnread = pending.map((i) => i.firstUnreadTs || i.threadTs || i.lastIncomingTs).filter(Boolean)
+          .reduce((x, y) => (x == null || ts(y) < ts(x) ? y : x), null);
+        const lastIncomingTs = all.map((i) => i.lastIncomingTs).reduce((x, y) => (ts(y) > ts(x) ? y : x));
+        const allArchived = all.every((i) => Store.isArchived(i));
+        d.items[key] = {
+          key, channel, threadTs: null, kind: 'channel',
+          createdTs: all.map((i) => i.createdTs).reduce((x, y) => (ts(y) < ts(x) ? y : x)),
+          lastTs: newest.lastTs, lastIncomingTs,
+          lastFromMe: !!newest.lastFromMe, lastUser: newest.lastUser, lastText: newest.lastText, lastBotName: newest.lastBotName || null,
+          openedTs: pending.length ? String(ts(firstUnread) - 0.000001) : lastIncomingTs,
+          archivedTs: allArchived ? newest.lastTs : null,
+          firstUnreadTs: firstUnread,
+          rootUser: null, rootText: null,
+          participants: [...new Set(all.flatMap((i) => i.participants || []))].slice(0, 6),
+          newCount: pending.reduce((n, i) => n + (i.newCount || 1), 0),
+          mention: pending.some((i) => i.mention),
+        };
+        for (const r of rows) delete d.items[r.key];
+      }
+      d.meta.channelRows = 1;
+    });
   }
 
   // ---- normalization -----------------------------------------------------
@@ -112,7 +156,13 @@ class Sync {
     const kind = this.dir.convKind(n.channel);
     if (n.isReply) return `${n.channel}:${n.threadTs}`;
     if (kind === 'im' || kind === 'mpim') return `${n.channel}:dm`;
-    return `${n.channel}:${n.ts}`;
+    return `${n.channel}:ch`;
+  }
+
+  // Is this thread's root part of the channel row's still-pending update?
+  inChannelUpdate(d, n) {
+    const ch = d.items[`${n.channel}:ch`];
+    return !!(ch && !Store.isArchived(ch) && ts(n.threadTs) > ts(ch.archivedTs));
   }
 
   mentionsMe(text) {
@@ -145,7 +195,7 @@ class Sync {
 
         if (n.user === this.me) {
           if (n.isReply) d.myThreads[key] = n.ts;
-          else if (kind === 'channel') d.myThreads[key] = n.ts;
+          else if (kind === 'channel') d.myThreads[`${n.channel}:${n.ts}`] = n.ts; // a thread I started
           if (it && ts(n.ts) >= ts(it.lastTs)) {
             Object.assign(it, { lastTs: n.ts, lastFromMe: true, lastUser: n.user, lastText: n.text });
             changed = true;
@@ -167,7 +217,8 @@ class Sync {
         // that are already open in the inbox). Human DMs notify everything.
         const botDm = kind === 'im' && this.dir.isBotDm(n.channel);
         if (include && n.isReply && (kind === 'channel' || botDm)) {
-          include = mention || this.isParticipant(d, n, key) || (it && !Store.isArchived(it));
+          include = mention || this.isParticipant(d, n, key) || (it && !Store.isArchived(it))
+            || (kind === 'channel' && this.inChannelUpdate(d, n));
         }
         if (include && seed && isUnread) include = isUnread(n, key, d, mention);
 
@@ -181,13 +232,14 @@ class Sync {
         }
 
         if (!it) {
+          const stream = key.endsWith(':dm') || key.endsWith(':ch');
           it = d.items[key] = {
             key, channel: n.channel,
-            threadTs: key.endsWith(':dm') ? null : (n.threadTs || n.ts),
-            kind: key.endsWith(':dm') ? 'dm' : 'thread',
+            threadTs: stream ? null : (n.threadTs || n.ts),
+            kind: key.endsWith(':dm') ? 'dm' : key.endsWith(':ch') ? 'channel' : 'thread',
             createdTs: n.ts, lastTs: n.ts, lastIncomingTs: '0', openedTs: '0', archivedTs: null,
-            rootUser: n.isReply ? null : n.user,
-            rootText: n.isReply ? null : n.text,
+            rootUser: n.isReply || stream ? null : n.user,
+            rootText: n.isReply || stream ? null : n.text,
             participants: [], newCount: 0, mention: false,
           };
           if (n.isReply) this.rootQueue.add(key);
@@ -332,7 +384,7 @@ class Sync {
 
   async messagesFor(it, { limit = 60 } = {}) {
     let raw;
-    if (it.kind === 'dm') {
+    if (it.kind !== 'thread') {
       const r = await slack.call('conversations.history', { channel: it.channel, limit });
       raw = (r.messages || []).reverse();
     } else {
@@ -369,22 +421,12 @@ class Sync {
       }));
   }
 
-  // When an item is archived, advance Slack's channel read marker as far as
-  // we can without hiding anything still waiting in the inbox.
+  // When a conversation's row (DM or channel update) is archived, advance
+  // Slack's read marker to its newest message. Thread rows don't move it.
   async syncSlackRead(channel) {
-    const items = Object.values(this.store.items).filter((i) => i.channel === channel);
-    const kind = this.dir.convKind(channel);
-    const pointOf = (i) => (i.kind === 'dm' ? i.lastTs : i.threadTs);
-    if (kind !== 'channel' && items.some((i) => i.kind === 'dm' && !Store.isArchived(i))) return;
-    const open = items.filter((i) => !Store.isArchived(i) && i.kind === 'thread' && kind === 'channel');
-    const ceiling = open.length ? Math.min(...open.map((i) => ts(i.threadTs))) : Infinity;
-    let best = null;
-    for (const i of items) {
-      if (!Store.isArchived(i)) continue;
-      if (kind !== 'channel' && i.kind !== 'dm') continue;
-      const p = pointOf(i);
-      if (ts(p) < ceiling && (!best || ts(p) > ts(best))) best = p;
-    }
+    const rows = Object.values(this.store.items).filter((i) => i.channel === channel && i.kind !== 'thread');
+    if (!rows.length || rows.some((i) => !Store.isArchived(i))) return;
+    const best = rows.map((i) => i.lastTs).reduce((x, y) => (ts(y) > ts(x) ? y : x));
     if (!best || ts(best) <= ts(this.lastRead[channel])) return;
     await slack.call('conversations.mark', { channel, ts: best }, { post: true });
     this.lastRead[channel] = best;
