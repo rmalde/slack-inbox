@@ -117,3 +117,30 @@ After updating the app checkout, run `./scripts/archive-service.sh preflight` th
 Run `./scripts/archive-service.sh prepare` once on each Mac to generate its device identity. Enroll the resulting public enrollment file with the service owner and configure Cloud Run identity in the device configuration as described in the private release README. Then run `./scripts/archive-service.sh activate` and `./scripts/archive-service.sh status` to verify a sync round. The service runs as a user LaunchAgent after activation. This release leaves inbound writes to the local inbox disabled.
 
 On launch, the app checks its active enrolled archive service and upgrades it in the background when its pinned release changes. First-time enrollment remains a separate step. To retry a worker upgrade manually, run `./scripts/archive-service.sh prepare` followed by `./scripts/archive-service.sh activate`. A compatible update retains the existing signing identity and local journal. Check the first subsequent sync round with `./scripts/archive-service.sh status`.
+
+### Optional signed archive capture
+
+Archive and Unarchive now use an already enrolled local PersonalTaskArchive
+helper when present. Existing `Slack Inbox/personal-task-archive.json` enrollment
+is preferred and never rewritten; new installations resolve the private
+`PersonalTaskArchive/slack/installation.json` and its pinned helper release.
+Workspace IDs must match both enrollment and the store reloaded under flock.
+No signing keys, account tokens or new installation are created by a gesture.
+
+Only the exact app window's main renderer document can invoke signed capture.
+Explicit item archive/unarchive reserves the exact channel/thread key and
+`archivedTs` under the store lock, then confirms with independent readback after
+fsync. Remote store changes and watchers never sign intents or mark Slack read.
+The existing **local user's archive** behavior—including optional Slack mark-read—
+is preserved in its original handler. Development renderers never sign.
+
+Missing enrollment leaves local behavior intact. Capture failure shows a safe
+sync attention message while preserving the local action; it does not claim the
+other computer received it. Selections over 100 items remain local and report
+that sync capture was unavailable. Store mutations require native locking,
+strict reload and fsync; no unlocked fallback is used. Remote edits during the
+own-write suppression window refresh the UI after that window.
+
+Run `node --test test/*test.*` for synthetic hook/config/store tests. Real paired
+host delivery, offline recovery and conflict handling still require the enrolled
+machines; tests and source publication alone do not prove that round-trip.

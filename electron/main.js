@@ -3,6 +3,9 @@
 const { app, BrowserWindow, ipcMain, Menu, nativeTheme, shell, Notification, protocol, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { pathToFileURL } = require('node:url');
+const createArchiveHook = require('./lib/archive-hook');
+const { archiveInstallation } = require('./lib/archive-installation');
 
 const slack = require('./lib/slack');
 const { Store, ts } = require('./lib/store');
@@ -30,6 +33,44 @@ let sync;
 let web;
 let brain;
 let customEmoji = {};
+let archiveHook = null;
+let archiveHookAccount = null;
+let archiveSyncError = null;
+function prepareArchiveHook() {
+  if (process.env.VITE_DEV) return;
+  try {
+    const config = archiveInstallation(app.getPath('userData'));
+    if (!config) return;
+    archiveHookAccount = config.accountId;
+    archiveHook = createArchiveHook({
+      ...config,
+      getWebContents: () => win && win.webContents,
+      expectedDocumentURL: pathToFileURL(path.join(__dirname, '..', 'dist', 'index.html')).href,
+      // The trusted Node helper replaces this hint with its durable acknowledged revision.
+      baseRevision: () => 0,
+      onError: ({ code }) => {
+        archiveSyncError = 'Archive sync needs attention. Your local change is saved.';
+        log('archive-sync', code);
+      },
+    });
+  } catch {
+    archiveSyncError = 'Archive sync needs attention. Your local changes still work.';
+    log('archive-sync', 'ARCHIVE_UI_CONFIGURATION_UNAVAILABLE');
+  }
+}
+function userArchive(event, method, keys) {
+  const wc = win && win.webContents;
+  const expectedURL = process.env.VITE_DEV ? 'http://127.0.0.1:5174/' : pathToFileURL(path.join(__dirname, '..', 'dist', 'index.html')).href;
+  if (!wc || wc.isDestroyed() || event.sender !== wc || event.senderFrame !== wc.mainFrame || event.senderFrame.url !== expectedURL) throw Error('ARCHIVE_UI_SENDER_REJECTED');
+  archiveHook = null; archiveHookAccount = null;
+  prepareArchiveHook();
+  if (archiveHook && store.meta.teamId === archiveHookAccount) {
+    archiveSyncError = null;
+    return archiveHook.run(event, store, 'item:' + method, keys);
+  }
+  if (archiveHook) archiveSyncError = 'Archive sync is not connected to this Slack workspace.';
+  return store[method](keys);
+}
 const log = (...a) => console.log('[slack-inbox]', ...a);
 
 function createWindow() {
@@ -220,6 +261,7 @@ app.whenReady().then(async () => {
   }
   const ud = app.getPath('userData');
   store = new Store(path.join(ud, 'inbox-store.json'));
+  prepareArchiveHook();
   dir = new Directory(ud);
   web = new WebSession(ud, store.meta.teamId);
   sync = new Sync({ store, dir, onChange: changed, onNotify: notify, log });
@@ -277,6 +319,7 @@ ipcMain.handle('inbox:list', () => (brain && brain.beginDecorate(), {
   items: Object.values(store.items).filter(visible).map(viewItem),
   status: {
     ...sync.status,
+    error: sync.status.error || archiveSyncError,
     hasToken: !!slack.getToken(),
     webConnected: web.connected,
     mutesFetchedAt: store.data.mutes.slackFetchedAt,
@@ -339,8 +382,8 @@ ipcMain.handle('channel:send', async (_e, { channel, text }) => {
 ipcMain.handle('item:open', (_e, key) => { store.markOpened(key); changed(); return true; });
 ipcMain.handle('item:unread', (_e, key) => { store.markUnread(key); changed(); return true; });
 
-ipcMain.handle('item:archive', (_e, keys) => {
-  store.archive(keys);
+ipcMain.handle('item:archive', (event, keys) => {
+  userArchive(event, 'archive', keys);
   changed();
   if (store.settings.markReadInSlack) {
     const chans = new Set(keys.map((k) => store.items[k] && store.items[k].channel).filter(Boolean));
@@ -349,7 +392,7 @@ ipcMain.handle('item:archive', (_e, keys) => {
   return true;
 });
 
-ipcMain.handle('item:unarchive', (_e, keys) => { store.unarchive(keys); changed(); return true; });
+ipcMain.handle('item:unarchive', (event, keys) => { userArchive(event, 'unarchive', keys); changed(); return true; });
 
 ipcMain.handle('item:send', async (_e, { key, text }) => {
   const it = store.items[key];

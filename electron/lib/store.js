@@ -53,21 +53,23 @@ class Store {
   _watch() {
     try {
       const base = path.basename(this.filePath);
-      fs.watch(path.dirname(this.filePath), (_ev, fname) => {
-        if (fname !== base || Date.now() < this._suppressUntil) return;
+      this._watcher = fs.watch(path.dirname(this.filePath), (_ev, fname) => {
+        if (fname !== base) return;
         clearTimeout(this._reloadT);
         this._reloadT = setTimeout(() => {
           this._load();
           if (this.onExternalChange) this.onExternalChange();
-        }, 80);
+        }, Math.max(80, this._suppressUntil - Date.now() + 20));
       });
     } catch { /* best-effort */ }
   }
 
-  _load() {
+  _load({ fd = null, strict = false, allowEmpty = false } = {}) {
     for (let i = 0; i < 3; i++) {
       try {
-        const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf8'));
+        const raw = fs.readFileSync(fd === null ? this.filePath : fd, 'utf8');
+        const parsed = allowEmpty && raw.length === 0 ? DEFAULTS() : JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || (parsed.items !== undefined && (!parsed.items || typeof parsed.items !== 'object' || Array.isArray(parsed.items)))) throw new Error('Invalid inbox store');
         const d = DEFAULTS();
         this.data = {
           ...d, ...parsed,
@@ -76,19 +78,30 @@ class Store {
         };
         return;
       } catch (e) {
+        if (strict) throw new Error('Inbox store changed or is invalid; no cached overwrite performed');
         if (e && e.code === 'ENOENT') break;
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15);
       }
     }
   }
 
-  // flock → reload → mutate → write in place → unlock.
+  close() { if (this._watcher) this._watcher.close(); clearTimeout(this._reloadT); }
+
+  // flock → strict fd reload → mutate → fsync in place → unlock.
   mutate(fn) {
     let fd = null;
     let locked = false;
     let out;
     try {
-      try { fd = fs.openSync(this.filePath, 'r+'); } catch { fd = fs.openSync(this.filePath, 'w+'); }
+      let created = false;
+      try { fd = fs.openSync(this.filePath, 'r+'); } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        try { fd = fs.openSync(this.filePath, 'wx+', 0o600); created = true; } catch (race) {
+          if (race.code !== 'EEXIST') throw race;
+          fd = fs.openSync(this.filePath, 'r+');
+        }
+      }
+      if (!fsx) throw new Error('Safe archive writes require file locking');
       if (fsx) {
         const deadline = Date.now() + 2000;
         while (!(locked = fsx.tryLock(fd))) {
@@ -96,12 +109,20 @@ class Store {
           Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
         }
       }
-      this._load();
+      if (!locked) throw new Error('Archive store busy; no unlocked write performed');
+      this._load({ fd, strict: true, allowEmpty: created });
       out = fn(this.data);
       const json = JSON.stringify(this.data);
       this._suppressUntil = Date.now() + 400;
+      const bytes = Buffer.from(json, 'utf8');
       fs.ftruncateSync(fd, 0);
-      fs.writeSync(fd, json, 0, 'utf8');
+      let offset = 0;
+      while (offset < bytes.length) {
+        const written = fs.writeSync(fd, bytes, offset, bytes.length - offset, offset);
+        if (written <= 0) throw new Error('Inbox store write did not complete');
+        offset += written;
+      }
+      fs.fsyncSync(fd);
     } finally {
       if (locked) { try { fsx.unlock(fd); } catch { /* released with fd */ } }
       if (fd != null) { try { fs.closeSync(fd); } catch { /* closed */ } }
