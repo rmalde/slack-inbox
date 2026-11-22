@@ -211,6 +211,13 @@ async function refreshMutes() {
 }
 
 app.whenReady().then(async () => {
+  if (process.platform === 'darwin' && !process.env.VITE_DEV) {
+    const upgrade = require('node:child_process').spawn('/usr/bin/ruby',
+      [path.join(__dirname, '..', 'scripts', 'upgrade-enrolled-archive.rb')], { stdio: 'ignore' });
+    upgrade.on('error', () => console.warn('Archive service updater could not start.'));
+    upgrade.on('exit', code => { if (code !== 0) console.warn('Archive service upgrade needs attention.'); });
+    upgrade.unref();
+  }
   const ud = app.getPath('userData');
   store = new Store(path.join(ud, 'inbox-store.json'));
   dir = new Directory(ud);
