@@ -1,4 +1,6 @@
 'use strict';
+const createArchiveConflictIPC = require('./lib/archive-conflict-ipc.cjs');
+
 
 const { app, BrowserWindow, ipcMain, Menu, nativeTheme, shell, Notification, protocol, clipboard } = require('electron');
 const path = require('path');
@@ -515,3 +517,5 @@ ipcMain.handle('settings:get', () => store.settings);
 ipcMain.handle('sync:now', () => { schedulePoll(0); return true; });
 ipcMain.handle('open:external', (_e, url) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url); return true; });
 ipcMain.handle('theme:isDark', () => nativeTheme.shouldUseDarkColors);
+
+ipcMain.handle('archive:conflicts',createArchiveConflictIPC({getWebContents:()=>win&&win.webContents,expectedDocumentURL:pathToFileURL(path.join(__dirname,'..','dist','index.html')).href,resolveInstallation:()=>{if(process.env.VITE_DEV)return null;const config=archiveInstallation(app.getPath('userData'));if(config&&config.accountId!==store.meta.teamId)throw Error('ARCHIVE_UI_ACCOUNT_REJECTED');return config;}}));

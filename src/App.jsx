@@ -1,3 +1,4 @@
+import ArchiveConflictPanel from './components/ArchiveConflictPanel';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import InboxList from './components/InboxList';
 import Reader from './components/Reader';
@@ -273,6 +274,7 @@ export default function App() {
         </div>
         {settingsOpen && settings && (
           <div className="popover" role="dialog">
+            <ArchiveConflictPanel />
             <Toggle label="Desktop notifications" sub="DMs, mentions, and threads you're in" on={settings.notifications} onChange={(v) => setSetting({ notifications: v })} />
             <Toggle label="Smart ordering" sub="Time-sensitive section + priority-ranked inbox" on={settings.smartOrder !== false} onChange={(v) => setSetting({ smartOrder: v })} />
             <Toggle label="Mark read in Slack on archive" sub="Clears Slack's unread badge too" on={settings.markReadInSlack} onChange={(v) => setSetting({ markReadInSlack: v })} />

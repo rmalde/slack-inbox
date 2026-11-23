@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 const inv = (ch) => (...a) => ipcRenderer.invoke(ch, ...a);
 
 contextBridge.exposeInMainWorld('api', {
+  archiveConflicts: (mode,input) => ipcRenderer.invoke('archive:conflicts',{mode,input}),
   list: inv('inbox:list'),
   directory: inv('directory:get'),
   messages: inv('item:messages'),
